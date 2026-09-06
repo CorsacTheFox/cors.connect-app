@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:paddingVertical="12dp">
+
+    <TextView
+        android:id="@+id/obStepNum"
+        android:layout_width="22dp"
+        android:layout_height="22dp"
+        android:layout_marginTop="1dp"
+        android:background="@drawable/bg_ob_step_num"
+        android:fontFamily="monospace"
+        android:gravity="center"
+        android:textColor="@color/accent_emerald"
+        android:textSize="10.5sp" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="14dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/obStepTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:lineSpacingMultiplier="1.35"
+            android:textColor="@color/ink"
+            android:textFontWeight="500"
+            android:textSize="13.5sp" />
+
+        <TextView
+            android:id="@+id/obStepSub"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:lineSpacingMultiplier="1.45"
+            android:textColor="@color/ink_3"
+            android:textSize="12sp" />
+    </LinearLayout>
+</LinearLayout>

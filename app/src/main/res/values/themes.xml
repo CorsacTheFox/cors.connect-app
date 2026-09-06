@@ -1,5 +1,5 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <style name="Base.Theme.WhitelistBypass" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Base.Theme.WhitelistBypass" parent="Theme.Material3.Dark.NoActionBar">
         <item name="colorPrimary">@color/accent_emerald</item>
         <item name="colorOnPrimary">@color/panel_bg</item>
         <item name="colorPrimaryContainer">@color/accent_emerald_soft</item>
@@ -22,6 +22,9 @@
         <item name="colorOutlineVariant">@color/hair</item>
         <item name="colorError">@color/error_red</item>
         <item name="bottomSheetDialogTheme">@style/ThemeOverlay.WhitelistBypass.BottomSheetDialog</item>
+        <!-- Nocturne redesign: Inter everywhere except the explicit mono labels. -->
+        <item name="android:fontFamily">@font/inter</item>
+        <item name="fontFamily">@font/inter</item>
     </style>
 
     <style name="ThemeOverlay.WhitelistBypass.BottomSheetDialog" parent="ThemeOverlay.Material3.BottomSheetDialog">
@@ -37,8 +40,8 @@
 
     <style name="ShapeAppearance.WhitelistBypass.BottomSheet" parent="">
         <item name="cornerFamily">rounded</item>
-        <item name="cornerSizeTopLeft">24dp</item>
-        <item name="cornerSizeTopRight">24dp</item>
+        <item name="cornerSizeTopLeft">14dp</item>
+        <item name="cornerSizeTopRight">14dp</item>
         <item name="cornerSizeBottomLeft">0dp</item>
         <item name="cornerSizeBottomRight">0dp</item>
     </style>
@@ -65,32 +68,54 @@
         <item name="android:textSize">14sp</item>
     </style>
 
+    <style name="QuickChip">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">30dp</item>
+        <item name="android:layout_marginEnd">7dp</item>
+        <item name="android:background">@drawable/bg_quick_chip</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:textColor">@color/ink_2</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
     <style name="Theme.WhitelistBypass" parent="Base.Theme.WhitelistBypass" />
 
     <style name="StatCell">
         <item name="android:layout_height">wrap_content</item>
         <item name="android:orientation">vertical</item>
-        <item name="android:padding">14dp</item>
+        <item name="android:padding">10dp</item>
     </style>
 
     <style name="StatLabel">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:fontFamily">monospace</item>
-        <item name="android:letterSpacing">0.18</item>
+        <item name="android:letterSpacing">0.1</item>
         <item name="android:textAllCaps">true</item>
         <item name="android:textColor">@color/ink_3</item>
-        <item name="android:textSize">9sp</item>
+        <item name="android:textSize">10sp</item>
     </style>
 
     <style name="StatValue">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">2dp</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textColor">@color/ink</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <!-- Compact session-metric value above the connect button (screen 1b). -->
+    <style name="RouteStatValue">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">4dp</item>
         <item name="android:fontFamily">monospace</item>
         <item name="android:textColor">@color/ink</item>
-        <item name="android:textSize">18sp</item>
-        <item name="android:textStyle">bold</item>
+        <item name="android:textSize">17sp</item>
     </style>
 
     <style name="StatVDivider">

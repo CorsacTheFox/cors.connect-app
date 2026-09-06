@@ -7,25 +7,42 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.net.ConnectivityManager
 import android.net.VpnService
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import android.util.Log
 import bypass.whitelist.MainActivity
 import bypass.whitelist.R
 import bypass.whitelist.util.Callback
-import bypass.whitelist.util.DnsMode
 import bypass.whitelist.util.Prefs
 import bypass.whitelist.util.SocksAuth
 import bypass.whitelist.util.Vpn
-import androidbind.Androidbind
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
+import bypass.whitelist.xray.XrayConfigBuilder
+import bypass.whitelist.xray.XrayEngine
 import kotlin.concurrent.thread
 
+/**
+ * VpnService for the instance/call flow. The WebRTC join and its local
+ * SOCKS5 relay (see `HeadlessRelayController` / `RelayController`) are
+ * already running and reachable at `Prefs.socksHost:Prefs.socksPort` by the
+ * time this service is asked to start (see [MainActivity.requestVpn]) — this
+ * class only owns the device-wide TUN capture and bridges it into that
+ * already-running local SOCKS5 proxy.
+ *
+ * That bridge is [XrayEngine] (the same standard-Xray engine used by
+ * [XrayVpnService]) configured with a `socks` outbound pointed at the relay
+ * (see [XrayConfigBuilder.buildForLocalUpstream]) — Xray-core's own
+ * `protocol: "tun"` inbound reads/writes the TUN fd directly, so no separate
+ * native tun2socks binary is needed. (An earlier version of this class called
+ * `androidbind.Androidbind.startTun2Socks`, a JNI method whose backing shared
+ * library was never actually part of this app's `mobile.aar` — only a
+ * subprocess-mode executable, `librelay.so`, ships there, which is what
+ * `HeadlessRelayController` runs as a child process for the relay/joiner
+ * itself. That JNI call always failed with `UnsatisfiedLinkError`.)
+ */
 class TunnelVpnService : VpnService() {
 
     companion object {
@@ -33,6 +50,19 @@ class TunnelVpnService : VpnService() {
         const val CHANNEL_ID = "vpn_channel"
         const val NOTIFICATION_ID = 1
         const val ACTION_STOP = "bypass.whitelist.STOP_VPN"
+
+        /**
+         * Hard cap on how long a stop may take. `XrayEngine.stop()` ends in a
+         * native gomobile call (`CoreController.stopLoop`) that can hang
+         * indefinitely on a stuck core shutdown; before this timeout existed
+         * a hung stop left `stopInProgress` true forever, which made
+         * [TunnelServiceState.isTunnelActive] report "tunnel running" for the
+         * rest of the process lifetime — the "only an app restart helps"
+         * state. When the cap fires, the stop is declared finished anyway:
+         * flags cleared, fd closed, service stopped, disconnect surfaced.
+         */
+        internal const val STOP_TIMEOUT_MS = 8_000L
+
         @Volatile var instance: TunnelVpnService? = null
         @Volatile var onDisconnect: Callback? = null
 
@@ -55,9 +85,30 @@ class TunnelVpnService : VpnService() {
     @Volatile var isRunning: Boolean = false
     @Volatile internal var startInProgress: Boolean = false
     @Volatile internal var stopInProgress: Boolean = false
-    private var vpnFd: ParcelFileDescriptor? = null
-    private var tun2socksThread: Thread? = null
-    @Volatile private var tunGeneration: Long = 0
+
+    /** When the current stop began (elapsedRealtime) — 0 while none is running. */
+    @Volatile internal var stopStartedAtMs: Long = 0L
+
+    /**
+     * True when a stop has been in flight for longer than [STOP_TIMEOUT_MS] —
+     * i.e. the engine shutdown hung and the flags no longer reflect reality.
+     * [TunnelServiceState] treats such a service as not running so a stuck
+     * stop can never block the next connect.
+     */
+    fun isStopStale(): Boolean =
+        stopInProgress && stopStartedAtMs > 0L &&
+            SystemClock.elapsedRealtime() - stopStartedAtMs > STOP_TIMEOUT_MS
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var stopTimeoutRunnable: Runnable? = null
+
+    /** Set by the stop thread once the engine shutdown actually returned. */
+    @Volatile private var stopFinished = false
+    private var rawTunFd: Int? = null
+
+    private val engine: XrayEngine by lazy {
+        XrayEngine(onLog = { message -> TunnelServiceState.logCallback?.invoke(message) })
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -97,7 +148,12 @@ class TunnelVpnService : VpnService() {
 
     @Synchronized
     fun stop() {
-        if (stopInProgress) return
+        // A previously timed-out stop left stale flags — recover them instead
+        // of returning early forever.
+        if (stopInProgress && !isStopStale()) return
+        if (stopInProgress) {
+            Log.w(TAG, "Previous stop is stale (engine shutdown hung) — forcing state cleanup")
+        }
         if (!isRunning && !startInProgress) {
             safeStopSelf()
             return
@@ -105,45 +161,63 @@ class TunnelVpnService : VpnService() {
         isRunning = false
         startInProgress = false
         stopInProgress = true
-        bumpTunGeneration()
+        stopStartedAtMs = SystemClock.elapsedRealtime()
+        stopFinished = false
         val disconnectCallback = onDisconnect
+        scheduleStopTimeout(disconnectCallback)
 
         thread(name = "vpn-stop") {
-            stopTun2SocksWithTimeout()
-
             try {
-                tun2socksThread?.join(1000)
-            } catch (e: Exception) {}
+                engine.stop()
+            } catch (t: Throwable) {
+                Log.e(TAG, "Xray bridge stop error: ${t.message}", t)
+            }
+            stopFinished = true
+            cancelStopTimeout()
+            rawTunFd?.let { closeRawFd(it) }
+            rawTunFd = null
 
             Handler(Looper.getMainLooper()).post {
                 try {
-                    tun2socksThread = null
-                    vpnFd = null
                     @Suppress("DEPRECATION")
                     stopForeground(true)
                     disconnectCallback?.invoke()
                     TunnelServiceState.requestTileRefresh(this@TunnelVpnService)
                     stopSelf()
                 } catch (t: Throwable) {
-                    stopInProgress = false
                     Log.e(TAG, "Crash during VPN stop: ${t.message}", t)
                 }
             }
         }
     }
 
-    private fun stopTun2SocksWithTimeout() {
-        val stopDone = CountDownLatch(1)
-        thread(name = "tun2socks-stop") {
-            try {
-                Androidbind.stopTun2Socks()
-            } catch (e: Exception) {
-                Log.e(TAG, "tun2socks stop error: ${e.message}")
-            } finally {
-                stopDone.countDown()
-            }
+    /**
+     * Safety net for a hung engine shutdown: if the stop hasn't completed
+     * within [STOP_TIMEOUT_MS], declare it finished anyway — clear the flags,
+     * close the TUN fd, stop the service and surface the disconnect — so the
+     * app never gets stuck in "tunnel is stopping" until a process restart.
+     */
+    private fun scheduleStopTimeout(disconnectCallback: Callback?) {
+        cancelStopTimeout()
+        val runnable = Runnable {
+            if (!stopInProgress || stopFinished) return@Runnable
+            Log.e(TAG, "VPN stop timed out after ${STOP_TIMEOUT_MS}ms — forcing cleanup")
+            TunnelServiceState.logCallback?.invoke("Tunnel stop timed out — forcing cleanup")
+            val fd = rawTunFd
+            rawTunFd = null
+            fd?.let { closeRawFd(it) }
+            safeStopSelf()
+            disconnectCallback?.invoke()
         }
-        stopDone.await(2000, TimeUnit.MILLISECONDS)
+        stopTimeoutRunnable = runnable
+        mainHandler.postDelayed(runnable, STOP_TIMEOUT_MS)
+    }
+
+    private fun cancelStopTimeout() {
+        mainHandler.post {
+            stopTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
+            stopTimeoutRunnable = null
+        }
     }
 
     private fun start() {
@@ -153,69 +227,18 @@ class TunnelVpnService : VpnService() {
         startForegroundNotification()
 
         val builder = Builder()
-            .setSession(Vpn.SESSION_NAME)
-            .addAddress(Vpn.ADDRESS, Vpn.PREFIX_LENGTH)
-            .addRoute(Vpn.ROUTE, 0)
-            .setMtu(Vpn.MTU)
+        VpnBuilder.configure(
+            service = this,
+            builder = builder,
+            sessionName = Vpn.SESSION_NAME,
+            ownPackageName = packageName,
+            splitTunnelingMode = Prefs.splitTunnelingMode,
+            splitTunnelingPackages = Prefs.splitTunnelingPackages,
+            logTag = TAG,
+        )
 
-        try {
-            builder.addAddress(Vpn.ADDRESS6, Vpn.PREFIX_LENGTH6)
-            builder.addRoute(Vpn.ROUTE6, 0)
-        } catch (e: Exception) {
-            Log.w(TAG, "IPv6 capture setup failed: ${e.message}")
-        }
-
-        when (Prefs.dnsMode) {
-            DnsMode.SYSTEM -> {
-                val systemDns = getSystemDnsServers()
-                if (systemDns.isNotEmpty()) {
-                    for (dns in systemDns) builder.addDnsServer(dns)
-                } else {
-                    builder.addDnsServer(Vpn.DNS_PRIMARY)
-                    builder.addDnsServer(Vpn.DNS_SECONDARY)
-                }
-            }
-            DnsMode.CUSTOM -> {
-                val primary = Prefs.dnsPrimary.trim()
-                val secondary = Prefs.dnsSecondary.trim()
-                if (primary.isNotEmpty()) builder.addDnsServer(primary)
-                if (secondary.isNotEmpty()) builder.addDnsServer(secondary)
-                if (primary.isEmpty() && secondary.isEmpty()) {
-                    builder.addDnsServer(Vpn.DNS_PRIMARY)
-                    builder.addDnsServer(Vpn.DNS_SECONDARY)
-                }
-            }
-        }
-
-        try {
-            when (Prefs.splitTunnelingMode) {
-                SplitTunnelingMode.NONE -> {
-                    builder.addDisallowedApplication(packageName)
-                }
-                SplitTunnelingMode.BYPASS -> {
-                    builder.addDisallowedApplication(packageName)
-                    Prefs.splitTunnelingPackages.forEach {
-                        try {
-                            builder.addDisallowedApplication(it)
-                        } catch (ignored: Exception) {
-                        }
-                    }
-                }
-                SplitTunnelingMode.ONLY -> {
-                    Prefs.splitTunnelingPackages.forEach {
-                        try {
-                            builder.addAllowedApplication(it)
-                        } catch (ignored: Exception) {
-                        }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Split tunneling failed: ${e.message}")
-        }
-
-        vpnFd = builder.establish()
-        if (vpnFd == null) {
+        val establishedFd = builder.establish()
+        if (establishedFd == null) {
             Log.e(TAG, "Failed to establish VPN")
             startInProgress = false
             TunnelServiceState.logCallback?.invoke("Failed to establish VPN")
@@ -223,49 +246,57 @@ class TunnelVpnService : VpnService() {
             stopSelf()
             return
         }
+        val fd = establishedFd.detachFd()
+        rawTunFd = fd
+
+        // Catching Throwable (not just Exception): a broken/missing gomobile
+        // native library surfaces as UnsatisfiedLinkError — an Error, not an
+        // Exception — which would otherwise crash the whole app here.
+        try {
+            engine.initEnv(applicationContext.filesDir.resolve("xray"))
+            val configJson = XrayConfigBuilder.buildForLocalUpstream(
+                host = Prefs.socksHost,
+                port = Prefs.socksPort.toInt(),
+                user = SocksAuth.user,
+                pass = SocksAuth.pass,
+                mtu = Vpn.MTU,
+            )
+            if (!engine.start(configJson, fd)) {
+                startInProgress = false
+                closeRawFd(fd)
+                rawTunFd = null
+                TunnelServiceState.logCallback?.invoke("Failed to start tunnel bridge")
+                TunnelServiceState.vpnStatusCallback?.invoke(VpnStatus.CALL_FAILED)
+                stopSelf()
+                return
+            }
+        } catch (t: Throwable) {
+            Log.e(TAG, "Tunnel bridge start crashed: ${t.message}", t)
+            startInProgress = false
+            closeRawFd(fd)
+            rawTunFd = null
+            TunnelServiceState.logCallback?.invoke("Tunnel bridge error: ${t.message}")
+            TunnelServiceState.vpnStatusCallback?.invoke(VpnStatus.CALL_FAILED)
+            stopSelf()
+            return
+        }
 
         isRunning = true
         startInProgress = false
-        val fd = vpnFd!!.detachFd()
-        vpnFd = null
         Log.i(TAG, "VPN established, fd=$fd, SOCKS5 ${SocksAuth.user}:${SocksAuth.pass}@${Prefs.socksHost}:${Prefs.socksPort}")
         updateStatus(VpnStatus.TUNNEL_ACTIVE)
-        val startGeneration = bumpTunGeneration()
-
-        tun2socksThread = Thread {
-            if (!isRunning || stopInProgress || !isTunGenerationCurrent(startGeneration)) {
-                closeRawFd(fd)
-                return@Thread
-            }
-            try {
-                Androidbind.startTun2Socks(fd.toLong(), Vpn.MTU.toLong(), Prefs.socksPort, SocksAuth.user, SocksAuth.pass)
-            } catch (e: Exception) {
-                Log.e(TAG, "tun2socks error: ${e.message}")
-                isRunning = false
-                startInProgress = false
-                stopInProgress = false
-                TunnelServiceState.logCallback?.invoke("tun2socks error: ${e.message}")
-                TunnelServiceState.vpnStatusCallback?.invoke(VpnStatus.TUNNEL_LOST)
-            }
-        }.also { it.start() }
-    }
-
-    private fun bumpTunGeneration(): Long = synchronized(this) {
-        tunGeneration += 1
-        tunGeneration
-    }
-
-    private fun isTunGenerationCurrent(generation: Long): Boolean = synchronized(this) {
-        tunGeneration == generation
     }
 
     private fun closeRawFd(fd: Int) {
         runCatching { ParcelFileDescriptor.adoptFd(fd).close() }
-            .onFailure { Log.w(TAG, "Failed to close stale tun fd=$fd: ${it.message}") }
+            .onFailure { Log.w(TAG, "Failed to close tun fd=$fd: ${it.message}") }
     }
 
     private fun safeStopSelf() {
         stopInProgress = false
+        stopStartedAtMs = 0L
+        stopTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
+        stopTimeoutRunnable = null
         isRunning = false
         startInProgress = false
         runCatching {
@@ -274,13 +305,6 @@ class TunnelVpnService : VpnService() {
         }
         TunnelServiceState.requestTileRefresh(this)
         stopSelf()
-    }
-
-    private fun getSystemDnsServers(): List<String> {
-        val connectivityManager = getSystemService(ConnectivityManager::class.java) ?: return emptyList()
-        val network = connectivityManager.activeNetwork ?: return emptyList()
-        val linkProperties = connectivityManager.getLinkProperties(network) ?: return emptyList()
-        return linkProperties.dnsServers.mapNotNull { it.hostAddress }
     }
 
     private fun startForegroundNotification() {

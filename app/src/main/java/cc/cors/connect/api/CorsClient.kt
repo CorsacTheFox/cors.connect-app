@@ -34,12 +34,14 @@ class CorsClient(
     fun createInstance(
         serviceId: Int? = null,
         telegramInitData: String? = null,
+        sessionToken: String? = null,
     ): CreateInstanceOut {
         // Always send a JSON body: the server requires a request body to be
         // present even when every field is optional (Pydantic "Field required"
         // on body otherwise). service_id is omitted to use the server default.
         //
-        // When telegramInitData is supplied, the server REUSES the user's
+        // When a credential is supplied (sessionToken bearer — the link-auth
+        // path — or legacy telegramInitData), the server REUSES the user's
         // still-live instance (if any) instead of spawning a duplicate, or
         // creates + claims on their behalf. The response then carries a session
         // token (CreateInstanceOut.token) and reused=true/false so the caller
@@ -47,14 +49,26 @@ class CorsClient(
         val body = JSONObject()
         if (serviceId != null) body.put("service_id", serviceId)
         if (!telegramInitData.isNullOrEmpty()) body.put("telegram_init_data", telegramInitData)
-        return CreateInstanceOut.parse(request("POST", "/api/app/instances", body))
+        return CreateInstanceOut.parse(request(
+            "POST", "/api/app/instances", body,
+            bearer = sessionToken?.takeIf { it.isNotBlank() },
+        ))
     }
 
-    fun claim(instanceId: Int, claimToken: String, telegramInitData: String): ClaimOut {
-        val body = JSONObject()
-            .put("telegram_init_data", telegramInitData)
-            .put("claim_token", claimToken)
-        return ClaimOut.parse(request("POST", "/api/app/instances/$instanceId/claim", body))
+    fun claim(
+        instanceId: Int,
+        claimToken: String,
+        telegramInitData: String? = null,
+        sessionToken: String? = null,
+    ): ClaimOut {
+        // Either credential works: a bearer session token (link-auth) or the
+        // legacy Telegram initData. claim_token is always required.
+        val body = JSONObject().put("claim_token", claimToken)
+        if (!telegramInitData.isNullOrEmpty()) body.put("telegram_init_data", telegramInitData)
+        return ClaimOut.parse(request(
+            "POST", "/api/app/instances/$instanceId/claim", body,
+            bearer = sessionToken?.takeIf { it.isNotBlank() },
+        ))
     }
 
     fun getInstance(instanceId: Int): InstanceState =
@@ -83,6 +97,17 @@ class CorsClient(
     fun telegramLogin(initData: String): LoginOut {
         val body = JSONObject().put("initData", initData)
         return LoginOut.parse(request("POST", "/api/auth/telegram", body))
+    }
+
+    /**
+     * Sign in with the user's Remnawave subscription link (the primary app
+     * auth). [subscription] may be a full `https://<panel>/sub/<token>` URL or
+     * the bare token; the server resolves it against the panel and returns a
+     * session token (same shape as the Telegram login).
+     */
+    fun authLink(subscription: String): LoginOut {
+        val body = JSONObject().put("subscription", subscription.trim())
+        return LoginOut.parse(request("POST", "/api/app/auth/link", body))
     }
 
     // ---- plumbing --------------------------------------------------------
@@ -151,7 +176,7 @@ class CorsClient(
     /**
      * Builds the request URL for [path] (e.g. `/api/app/health`).
      *
-     * For a normal server ([baseUrl] like `https://beta.cors-fox.cc`) the path
+     * For a normal server ([baseUrl] like `https://your-backend.example.com`) the path
      * is appended directly. When [baseUrl] points at a Yandex Cloud Function
      * (`functions.yandexcloud.net`) the path is *not* appended — that domain
      * does not support path routing and treats `/<id>/api/...` as a different

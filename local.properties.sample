@@ -1,0 +1,17 @@
+# Copy to `local.properties` (gitignored) and fill in real values.
+# Environment variables of the same name override these.
+
+# Android SDK location (regenerated automatically by Android Studio on first sync)
+sdk.dir=/path/to/your/Android/sdk
+
+# ---- Cors.Connect backend configuration ----
+# Base URL of your instance-creation service.
+CORS_BASE_URL=https://your-backend.example.com
+
+# Shared static secret; must match the server's WB_APP_TOKEN / X-App-Token.
+# Until this is set, CorsClient.isConfigured stays false and the
+# instance-creation API is never called (the app still builds and runs).
+CORS_APP_TOKEN=your-shared-secret
+
+# Telegram bot username the app opens to obtain WebApp initData for the claim flow.
+CORS_TG_BOT=your_telegram_bot_username

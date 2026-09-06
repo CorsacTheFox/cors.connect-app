@@ -62,7 +62,7 @@ class HeadlessVkFragment : Fragment(), JoinSessionShutdown {
                 if (status == VpnStatus.TUNNEL_ACTIVE) {
                     activity?.runOnUiThread {
                         if (!isSessionAlive()) return@runOnUiThread
-                        host?.onJoinStatusText("Relay ready, starting local VPN")
+                        host?.onJoinStatusText(getString(R.string.relay_ready_starting_vpn))
                         webView.stopLoading()
                         webView.loadUrl(BLANK_URL)
                         webView.isVisible = false

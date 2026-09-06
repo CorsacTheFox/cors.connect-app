@@ -1,8 +1,11 @@
 package bypass.whitelist.tunnel
 
-enum class TunnelMode(val label: String, val relayArg: String, val isPion: Boolean) {
-    DC("DC", "dc", false),
-    VIDEO("Video", "video", true);
+import androidx.annotation.StringRes
+import bypass.whitelist.R
+
+enum class TunnelMode(@StringRes val labelRes: Int, val relayArg: String, val isPion: Boolean) {
+    DC(R.string.tunnel_mode_dc, "dc", false),
+    VIDEO(R.string.tunnel_mode_video, "video", true);
 
     fun relayMode(platform: CallPlatform): String {
         if (!isPion) return "dc-joiner"

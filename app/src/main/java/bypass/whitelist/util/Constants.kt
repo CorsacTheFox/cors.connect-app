@@ -1,6 +1,8 @@
 package bypass.whitelist.util
 
+import androidx.annotation.StringRes
 import bypass.whitelist.BuildConfig
+import bypass.whitelist.R
 import java.security.SecureRandom
 
 object Net {
@@ -11,6 +13,8 @@ object Ports {
     const val DEFAULT_SOCKS = 1080L
     const val DC_WS = 9000L
     const val PION_SIGNALING = 9001L
+    /** Loopback SOCKS5 port Xray-core listens on for the standard Xray connection mode. */
+    const val DEFAULT_XRAY_SOCKS = 1081L
 }
 
 enum class SocksAuthMode { AUTO, MANUAL }
@@ -36,19 +40,20 @@ object SocksAuth {
         get() = if (Prefs.socksAuthMode == SocksAuthMode.MANUAL) Prefs.socksPass else autoPass
 }
 
-enum class DnsMode(val label: String) {
-    SYSTEM("System"),
-    CUSTOM("Custom"),
+enum class DnsMode(@StringRes val labelRes: Int) {
+    SYSTEM(R.string.dns_mode_system),
+    CUSTOM(R.string.dns_mode_custom),
 }
 
-enum class ThemeMode(val label: String) {
-    SYSTEM("System"),
-    LIGHT("Light"),
-    DARK("Dark"),
+enum class ThemeMode(@StringRes val labelRes: Int) {
+    SYSTEM(R.string.theme_mode_system),
+    LIGHT(R.string.theme_mode_light),
+    DARK(R.string.theme_mode_dark),
 }
 
 object PrefsKeys {
     const val CONNECT_ON_START = "connect_on_start"
+    const val ONBOARDING_DONE = "onboarding_done"
     const val TUNNEL_MODE = "tunnel_mode"
     const val SPLIT_TUNNELING_MODE = "split_tunneling_mode"
     const val SPLIT_TUNNELING_PACKAGES = "split_tunneling_packages"
@@ -73,6 +78,17 @@ object PrefsKeys {
     const val ACTIVE_DESTINATION_ID = "active_destination_id"
     const val THEME_MODE = "theme_mode"
 
+    // Updater / housekeeping
+    const val LAST_UPDATE_CHECK = "last_update_check"
+    const val BATTERY_REMINDER_SHOWN = "battery_reminder_shown"
+
+    // Standard Xray connections
+    const val CONNECTION_MODE = "connection_mode"
+    const val XRAY_SAVED_SERVERS = "xray_saved_servers"
+    const val XRAY_ACTIVE_SERVER_ID = "xray_active_server_id"
+    const val XRAY_SUBSCRIPTIONS = "xray_subscriptions"
+    const val XRAY_SOCKS_PORT = "xray_socks_port"
+
     // Cors.Connect service
     const val CORS_BASE_URL = "cors_base_url"
     const val CORS_TG_INIT_DATA = "cors_tg_init_data"
@@ -80,6 +96,10 @@ object PrefsKeys {
     const val CORS_CLAIM_TOKEN = "cors_claim_token"
     const val CORS_SESSION_TOKEN = "cors_session_token"
     const val CORS_USERNAME = "cors_username"
+    const val CORS_SUBSCRIPTION_LINK = "cors_subscription_link"
+
+    /** Stable per-install device id sent as `x-hwid` on subscription requests. */
+    const val DEVICE_HWID = "device_hwid"
 }
 
 object VP8Defaults {
@@ -99,7 +119,7 @@ object Vpn {
     const val PREFIX_LENGTH6 = 128
     const val ROUTE6 = "::"
     const val MTU = 1500
-    const val DNS_PRIMARY = "8.8.8.8"
-    const val DNS_SECONDARY = "8.8.4.4"
+    const val DNS_PRIMARY = "1.1.1.1"
+    const val DNS_SECONDARY = "1.0.0.1"
     const val SESSION_NAME = "CorsConnect"
 }

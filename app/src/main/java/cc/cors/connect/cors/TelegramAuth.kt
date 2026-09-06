@@ -30,8 +30,20 @@ object TelegramAuth {
      * in the server's `static/tg-auth.html`.
      */
     private const val CALLBACK_SCHEME = "https"
-    private const val CALLBACK_HOST = "beta.cors-fox.cc"
+    // Public repo placeholder. Set this to the verified HTTPS domain your
+    // Telegram bot's WebApp redirects to, and keep it in sync with the
+    // matching intent-filter host in AndroidManifest.xml. See SECURITY_CLEANUP.md.
+    private const val CALLBACK_HOST = "applink.example.invalid"
     private const val CALLBACK_PATH = "/tginit"
+
+    /**
+     * Custom-scheme form of the same callback (`corsconnect://tginit?initdata=...`).
+     * Used by the server's /tginit handoff page: on Android 15+/16 unverified
+     * https App Links open in the browser instead of the app, and from there
+     * only a custom scheme fired by a user gesture reliably reaches us.
+     */
+    private const val CALLBACK_CUSTOM_SCHEME = "corsconnect"
+    private const val CALLBACK_CUSTOM_HOST = "tginit"
 
     /** Scheme/host/path of the App Link the bot returns to. */
     val SCHEME: String get() = CALLBACK_SCHEME
@@ -61,14 +73,23 @@ object TelegramAuth {
         Prefs.corsTgInitData = ""
     }
 
-    /** True if [uri] is an `https://<host>/tginit?initdata=...` App Link callback. */
+    /**
+     * True if [uri] is an `https://<host>/tginit?initdata=...` App Link callback
+     * or its `corsconnect://tginit?initdata=...` custom-scheme form. Both carry
+     * the same query parameter and flow through the same ingest path.
+     */
     fun isCallback(uri: Uri?): Boolean {
         if (uri == null) return false
-        if (!uri.scheme.orEmpty().equals(SCHEME, ignoreCase = true)) return false
-        if (!uri.host.orEmpty().equals(HOST, ignoreCase = true)) return false
+        val scheme = uri.scheme.orEmpty()
+        val host = uri.host.orEmpty()
+        if (scheme.equals(CALLBACK_CUSTOM_SCHEME, ignoreCase = true)) {
+            return host.equals(CALLBACK_CUSTOM_HOST, ignoreCase = true)
+        }
+        if (!scheme.equals(CALLBACK_SCHEME, ignoreCase = true)) return false
+        if (!host.equals(CALLBACK_HOST, ignoreCase = true)) return false
         // Match the manifest's pathPrefix="/tginit"; ignore a trailing slash.
         val path = uri.path.orEmpty().trimEnd('/')
-        return path == PATH.trimEnd('/')
+        return path == CALLBACK_PATH.trimEnd('/')
     }
 
     /**

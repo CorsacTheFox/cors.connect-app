@@ -11,12 +11,15 @@ private fun JSONObject.optNullableString(key: String): String? =
 data class Health(
     val ok: Boolean,
     val telegramEnabled: Boolean,
+    /** True when the Remnawave subscription link-auth is usable (new app flow). */
+    val linkAuth: Boolean = false,
     val serviceAvailable: Boolean,
 ) {
     companion object {
         fun parse(o: JSONObject) = Health(
             ok = o.optBoolean("ok"),
             telegramEnabled = o.optBoolean("telegram_enabled"),
+            linkAuth = o.optBoolean("link_auth", false),
             serviceAvailable = o.optBoolean("service_available"),
         )
     }

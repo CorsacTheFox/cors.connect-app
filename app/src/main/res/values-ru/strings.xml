@@ -1,0 +1,390 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="app_name">Cors.Connect</string>
+    <string name="share_logs">Поделиться логами</string>
+    <string name="copy_logs_toast">Логи скопированы в буфер обмена</string>
+    <string name="autofill_settings_title">Настройки автозаполнения</string>
+    <string name="autofill_name_input_hint">Имя автозаполнения</string>
+    <string name="autofill_generate_random">Случайное</string>
+    <string name="split_tunneling_show_system_apps">Показывать системные приложения</string>
+    <string name="split_tunneling_mode_changed">Переподключитесь, чтобы изменения вступили в силу</string>
+    <string name="split_tunneling_search_apps_hint">Поиск</string>
+    <string name="expand_webview">Развернуть WebView</string>
+    <string name="collapse_webview">Свернуть WebView</string>
+    <string name="vpn_starting">Запуск…</string>
+    <string name="vpn_stopping">Остановка…</string>
+    <string name="vpn_connecting">Подключение…</string>
+    <string name="vpn_call_connected">Подключено</string>
+    <string name="vpn_datachannel_open">DataChannel открыт</string>
+    <string name="vpn_datachannel_lost">DataChannel потерян</string>
+    <string name="vpn_tunnel_active">Туннель активен</string>
+    <string name="vpn_tunnel_lost">Туннель потерян, переподключение…</string>
+    <string name="vpn_call_disconnected">Отключено</string>
+    <string name="vpn_call_failed">Не удалось подключиться</string>
+    <string name="vpn_port_busy" tools:ignore="PluralsCandidate">Порт %1$d занят</string>
+    <string name="vpn_foreign_active">Активен другой VPN. Сначала отключите его.</string>
+    <string name="action_required_captcha">Требуется действие (капча)</string>
+    <string name="captcha_pill_label">Требуется капча / id.vk.com</string>
+    <string name="jshook_pill_label">Живая / интерактивная страница</string>
+    <string name="proxy_settings_title">Прокси</string>
+    <string name="proxy_auth_auto">Авто</string>
+    <string name="proxy_auth_manual">Вручную</string>
+    <string name="proxy_username_hint">Имя пользователя</string>
+    <string name="proxy_password_hint">Пароль</string>
+    <string name="dns_settings_title">DNS</string>
+    <string name="dns_primary_hint">Основной DNS</string>
+    <string name="dns_secondary_hint">Резервный DNS</string>
+    <string name="vp8_settings_title">Настройки VP8</string>
+    <string name="vp8_fps_label">FPS</string>
+    <string name="vp8_batch_label">Батч</string>
+    <string name="vp8_dual_track_title">Двойной трек</string>
+    <string name="vp8_dual_track_sub">Публиковать второй VP8-трек как демонстрацию экрана и распределять исходящий поток между ними.</string>
+    <string name="vp8_reliable_title">Надёжный режим (KCP)</string>
+    <string name="vp8_reliable_sub">Обернуть видеоканал надёжностью KCP. Выкл — чистый VP8, быстрее, но с потерями.</string>
+    <string name="notification_vpn_title">VPN активен</string>
+    <string name="notification_xray_title">Xray VPN активен</string>
+    <string name="notification_proxy_title">Прокси активен</string>
+    <string name="notification_session_connecting">Запуск headless-сессии</string>
+    <string name="error_no_destination">Сначала добавьте и выберите подключение</string>
+    <string name="notification_disconnect">Отключить</string>
+    <string name="dc_mode_not_supported">Режим DC не поддерживается — переключение на видео</string>
+    <string name="tile_requires_headless_destination">Сначала выберите headless-подключение</string>
+    <string name="tile_vpn_permission_required">Откройте приложение и выдайте разрешение VPN</string>
+    <string name="tile_connecting">Подключение…</string>
+    <string name="tile_active">Обход включён</string>
+
+    <string name="status_stopping_previous">Остановка предыдущей сессии…</string>
+    <string name="status_requesting_replacement">Запрос на замену VPN…</string>
+    <string name="status_still_shutting_down">Предыдущая сессия всё ещё останавливается. Попробуйте подключиться снова.</string>
+    <string name="relay_ready_starting_vpn">Релей готов, запускается локальный VPN</string>
+    <string name="relay_reconnected">Релей переподключён</string>
+
+    <string name="nav_main">Главная</string>
+    <string name="nav_settings">Настройки</string>
+    <string name="nav_activity">Логи</string>
+    <string name="nav_servers">Серверы</string>
+
+    <string name="main_sub_no_configs">Нет сохранённых подключений</string>
+    <plurals name="main_sub_count">
+        <item quantity="one">%d вариант подключения</item>
+        <item quantity="few">%d варианта подключения</item>
+        <item quantity="many">%d вариантов подключения</item>
+        <item quantity="other">%d вариантов подключения</item>
+    </plurals>
+    <string name="main_sub_live">LIVE</string>
+
+    <string name="empty_calls_title">Добавьте первое подключение</string>
+    <string name="empty_calls_sub">Вставьте ссылку для подключения, чтобы сохранить её</string>
+
+    <string name="empty_connections_title">Добавьте первое подключение</string>
+    <string name="empty_connections_sub">Добавьте подключение Whitelist Bypass или сервер Xray</string>
+
+    <string name="connection_type_whitelist_bypass">Обход белых списков</string>
+    <string name="whitelist_bypass_row_sub">Использовать с LTE-сетью при белых списках</string>
+    <string name="whitelist_bypass_glyph">WB</string>
+    <string name="add_connection_call">Подключение Whitelist Bypass</string>
+
+    <string name="wb_confirm_title">Похоже, текущая сеть работает без обхода белых списков</string>
+    <string name="wb_confirm_sub">Продолжить подключение к «Обход белых списков»?</string>
+    <string name="wb_confirm_yes">Да</string>
+    <string name="wb_confirm_no">Нет</string>
+    <string name="add_connection_xray">Сервер или подписка Xray</string>
+    <string name="scan_qr_unsupported">Отсканируйте ссылку Xray (vless://)</string>
+
+    <string name="connection_mode_instance">Инстанс</string>
+    <string name="connection_mode_xray">Xray</string>
+
+    <string name="main_sub_no_servers">Серверы не импортированы</string>
+    <plurals name="main_sub_server_count">
+        <item quantity="one">Импортирован %d сервер</item>
+        <item quantity="few">Импортировано %d сервера</item>
+        <item quantity="many">Импортировано %d серверов</item>
+        <item quantity="other">Импортировано %d серверов</item>
+    </plurals>
+    <string name="status_detail_no_servers">Импортируйте сервер, чтобы начать</string>
+    <string name="status_detail_pick_server">Выберите сервер и нажмите «Подключить»</string>
+    <string name="empty_servers_title">Добавьте первый сервер</string>
+    <string name="empty_servers_sub">Вставьте share-ссылку или URL подписки</string>
+
+    <string name="xray_sheet_title">Добавить подключение Xray</string>
+    <string name="xray_sheet_sub">Вставьте ссылку vless://, vmess:// или trojan://, чтобы сохранить один сервер, или URL подписки, чтобы сразу импортировать несколько.</string>
+    <string name="xray_sheet_field_name_hint">напр., Мой сервер</string>
+    <string name="xray_sheet_field_link">Ссылка или URL подписки</string>
+    <string name="xray_sheet_field_link_hint">vless://… или https://…</string>
+    <string name="xray_sheet_save">Сохранить</string>
+    <string name="xray_sheet_saving">Загрузка…</string>
+    <string name="xray_sheet_error_bad_link">Не удалось разобрать эту ссылку</string>
+    <string name="xray_sheet_error_unrecognized">Введите ссылку vless://, vmess:// или trojan:// либо URL подписки http(s)://</string>
+    <string name="xray_sheet_error_subscription">Не удалось загрузить или разобрать подписку</string>
+    <plurals name="xray_toast_subscription_imported">
+        <item quantity="one">Импортирован %d сервер</item>
+        <item quantity="few">Импортировано %d сервера</item>
+        <item quantity="many">Импортировано %d серверов</item>
+        <item quantity="other">Импортировано %d серверов</item>
+    </plurals>
+
+    <string name="xray_server_menu_set_active">Сделать активным</string>
+    <string name="xray_server_menu_rename">Переименовать</string>
+    <string name="xray_server_menu_delete">Удалить</string>
+    <string name="xray_server_rename_title">Переименовать сервер</string>
+    <string name="xray_server_delete_title">Удалить сервер</string>
+    <string name="xray_server_delete_confirm">Удалить «%1$s»?</string>
+
+    <string name="settings_section_xray">Стандартный Xray</string>
+    <string name="settings_row_xray_servers">Серверы Xray</string>
+    <plurals name="settings_row_xray_servers_sub">
+        <item quantity="one">Серверов: %1$d · Подписок: %2$d</item>
+        <item quantity="few">Серверов: %1$d · Подписок: %2$d</item>
+        <item quantity="many">Серверов: %1$d · Подписок: %2$d</item>
+        <item quantity="other">Серверов: %1$d · Подписок: %2$d</item>
+    </plurals>
+    <string name="settings_forget_all_xray_servers">Забыть все серверы Xray</string>
+    <string name="settings_forget_all_xray_servers_sub">Удаляет импортированные серверы и подписки</string>
+    <string name="settings_toast_xray_servers_cleared">Все серверы Xray удалены</string>
+
+    <string name="xray_subs_section_subscriptions">Подписки</string>
+    <string name="xray_subs_section_manual">Добавленные вручную</string>
+    <string name="xray_all_servers_section">Все серверы</string>
+    <string name="xray_subs_row_sub">%1$d серверов · обновлено %2$s</string>
+    <string name="xray_subs_row_sub_never">Ещё не обновлялась</string>
+    <string name="xray_subs_menu_refresh">Обновить</string>
+    <string name="xray_subs_menu_remove">Удалить</string>
+    <string name="xray_subs_toast_refreshing">Обновление подписки…</string>
+
+    <string name="hero_connect">Подключить</string>
+    <string name="hero_cancel">Отмена</string>
+    <string name="hero_disconnect">Отключить</string>
+
+    <string name="status_headline_disconnected">Отключено</string>
+    <string name="status_detail_no_calls">Добавьте подключение, чтобы начать</string>
+    <string name="status_detail_pick_call">Выберите подключение и нажмите «Подключить»</string>
+    <string name="status_headline_connecting">Подключение</string>
+    <string name="status_headline_connected">Подключено</string>
+
+    <string name="stat_traffic">Трафик</string>
+    <string name="stat_days_left">Дней осталось</string>
+    <string name="stat_unlimited">безлимит</string>
+    <string name="stat_no_expiry">--</string>
+    <string name="stat_expired">истекла</string>
+    <string name="stat_traffic_unlimited">Использовано %1$s</string>
+    <string name="stat_traffic_of">%1$s / %2$s</string>
+    <string name="stat_days_value">%1$d</string>
+    <string name="stat_uptime">Аптайм</string>
+    <string name="stat_mode">Режим</string>
+    <string name="stat_mode_xray">Xray</string>
+    <string name="stat_rx">Приём</string>
+    <string name="stat_tx">Отдача</string>
+    <string name="stat_ping">Пинг</string>
+    <string name="main_route_device">Ваше устройство</string>
+    <string name="main_route_exit">Выход</string>
+    <string name="route_status_connected">Подключено · %1$s</string>
+
+    <string name="services_run">Проверка сервисов</string>
+    <string name="quick_chip_bot">Проверить/купить подписку</string>
+    <string name="main_chip_subscription">Подписка</string>
+    <string name="main_route_section">Подключения</string>
+    <string name="main_route_all_servers">Все серверы</string>
+    <string name="services_running">Проверка&#8230;</string>
+    <string name="ping_measuring">Пинг&#8230;</string>
+    <string name="ping_ms">%1$d мс</string>
+    <string name="ping_timeout">Пинг: таймаут</string>
+    <string name="services_ok">доступен</string>
+    <string name="services_fail">недоступен</string>
+    <string name="services_ms">%1$d мс</string>
+    <string name="services_summary">Доступно %1$d из %2$d</string>
+    <string name="services_progress">Проверка %1$d из %2$d…</string>
+    <string name="services_xray_note">В режиме Xray проверка приблизительная: она отражает общую доступность сайтов через систему, а не сам туннель Xray.</string>
+
+    <string name="picker_add_title">Добавить подключение</string>
+
+    <string name="sheet_new_title">Новое подключение</string>
+    <string name="sheet_new_sub">Сохраните ссылку для подключения в список. Платформа определяется автоматически.</string>
+    <string name="sheet_field_name">Название</string>
+    <string name="sheet_field_link">Ссылка для подключения</string>
+    <string name="sheet_field_name_hint">напр., Созвон VK</string>
+    <string name="sheet_field_link_hint">https://&#8230;</string>
+    <string name="sheet_save">Сохранить подключение</string>
+    <string name="sheet_save_short">Сохранить</string>
+    <string name="sheet_cancel">Отмена</string>
+
+    <string name="whitelist_non_lte_title">Подключиться по Wi-Fi?</string>
+    <string name="whitelist_non_lte_body">Белые списки рассчитаны на мобильную сеть (LTE) — они обходят блокировки на стороне оператора. По Wi-Fi или Ethernet эффекта обычно нет. Всё равно подключиться?</string>
+    <string name="whitelist_non_lte_confirm">Всё равно подключиться</string>
+
+    <string name="paste_from_clipboard">Вставить из буфера</string>
+    <string name="clipboard_empty">Буфер обмена пуст</string>
+    <string name="scan_qr_title">Сканировать QR-код</string>
+    <string name="scan_qr_prompt">Наведите камеру на QR-код из приложения создателя</string>
+
+
+    <string name="settings_row_tunnel_mode">Режим туннеля</string>
+    <string name="tunnel_mode_dc">DC</string>
+    <string name="tunnel_mode_video">Видео</string>
+    <string name="dns_mode_system">Системный</string>
+    <string name="dns_mode_custom">Свой</string>
+    <string name="settings_row_vp8">Настройки VP8</string>
+    <string name="settings_row_vp8_sub" tools:ignore="PluralsCandidate">%1$d fps / батч %2$d</string>
+    <string name="settings_row_vp8_flag_dual">dual</string>
+    <string name="settings_row_vp8_flag_kcp">kcp</string>
+    <string name="settings_row_autofill">Автозаполнение</string>
+    <string name="settings_row_autofill_off">Выкл</string>
+    <string name="settings_row_split">Раздельное туннелирование</string>
+    <string name="settings_row_proxy">Прокси</string>
+    <string name="settings_row_proxy_sub">Порт SOCKS5 %1$d</string>
+    <string name="settings_row_dns">DNS</string>
+    <string name="settings_row_headless">Headless-режим</string>
+    <string name="settings_row_headless_sub">Пропустить видимый вход через браузер</string>
+    <string name="settings_row_reconnect">Автоподключение при запуске</string>
+    <string name="settings_row_reconnect_sub">Автоматически восстанавливать последнюю сессию</string>
+    <string name="settings_row_debug">Отладочные логи</string>
+    <string name="settings_row_debug_sub">Подробные логи релея для поиска проблем</string>
+
+    <string name="settings_toast_destinations_cleared">Все подключения удалены</string>
+    <string name="settings_toast_reset_done">Настройки сброшены</string>
+
+    <string name="destination_menu_rename">Переименовать</string>
+    <string name="destination_menu_delete">Удалить</string>
+    <string name="destination_rename_title">Переименовать подключение</string>
+    <string name="destination_delete_title">Удалить подключение</string>
+    <string name="destination_delete_confirm">Удалить «%1$s»?</string>
+
+    <string name="back">Назад</string>
+    <string name="split_tunneling_title">Раздельное туннелирование</string>
+    <string name="split_tunneling_mode_off">Выкл</string>
+    <string name="split_tunneling_mode_bypass">Обход</string>
+    <string name="split_tunneling_mode_bypass_sub">Выбранные приложения идут в обход туннеля</string>
+    <string name="split_tunneling_mode_only">Только</string>
+    <string name="split_tunneling_mode_only_sub">Только выбранные приложения идут через туннель</string>
+    <string name="split_tunneling_apps_section">Приложения</string>
+    <string name="split_tunneling_summary_off">Выкл</string>
+    <plurals name="split_tunneling_summary_count">
+        <item quantity="one">%1$s, %2$d приложение</item>
+        <item quantity="few">%1$s, %2$d приложения</item>
+        <item quantity="many">%1$s, %2$d приложений</item>
+        <item quantity="other">%1$s, %2$d приложений</item>
+    </plurals>
+
+    <string name="settings_section_tunnel">Туннель</string>
+    <string name="settings_section_network">Сеть</string>
+    <string name="settings_section_connection">Подключение</string>
+    <string name="settings_section_app">Приложение</string>
+    <string name="settings_section_media">Видеопайплайн</string>
+    <string name="settings_section_automation">Автоматизация</string>
+    <string name="settings_section_advanced">Ещё</string>
+    <string name="settings_advanced_title">Расширенные настройки</string>
+    <string name="settings_row_advanced">Расширенные настройки</string>
+    <string name="settings_row_advanced_sub">Видео, автозаполнение, Xray, сервис и сброс</string>
+    <string name="settings_row_update">Обновления</string>
+    <string name="settings_row_update_sub">Текущая версия %1$s · проверить новую сборку на GitHub</string>
+    <string name="settings_row_battery">Оптимизация батареи</string>
+    <string name="settings_row_battery_sub">Отключите её, чтобы Android не замораживал туннель</string>
+    <string name="settings_row_battery_ok">Отключена — туннель работает без ограничений</string>
+    <string name="battery_reminder_title">Отключить оптимизацию батареи</string>
+    <string name="battery_reminder_sub">Android может замораживать VPN-туннель в фоне. Исключение приложения из оптимизации батареи сделает соединение стабильным.</string>
+    <string name="battery_reminder_allow">Разрешить</string>
+    <string name="battery_reminder_later">Позже</string>
+    <string name="update_title">Обновления</string>
+    <string name="update_checking">Проверка обновлений…</string>
+    <string name="update_current_version">Текущая версия %1$s</string>
+    <string name="update_up_to_date">У вас последняя версия (%1$s)</string>
+    <string name="update_available">Доступна версия %1$s</string>
+    <string name="update_check_failed">Не удалось связаться с GitHub — проверьте соединение</string>
+    <string name="update_download">Скачать релиз</string>
+    <string name="update_open_page">Открыть релизы</string>
+    <string name="update_downloading">Загрузка обновления…</string>
+    <string name="update_notification_title">Cors.Connect %1$s</string>
+    <string name="ping_check_button">Проверить пинг</string>
+    <string name="ping_button">Пинг</string>
+    <string name="refresh_subscriptions_button">Обновить подписку</string>
+    <string name="xray_refresh_button">Обновить подписки</string>
+    <string name="xray_refresh_none">Нет подписок для обновления</string>
+    <string name="xray_refresh_done">Обновлено %1$d из %2$d подписок · %3$d серверов</string>
+    <string name="xray_refresh_failed">Не удалось обновить подписки</string>
+    <string name="settings_section_behavior">Поведение</string>
+    <string name="settings_section_appearance">Оформление</string>
+    <string name="settings_row_theme">Тема</string>
+    <string name="settings_row_theme_sub">Светлая, тёмная или как в системе</string>
+    <string name="theme_mode_system">Как в системе</string>
+    <string name="theme_mode_light">Светлая</string>
+    <string name="theme_mode_dark">Тёмная</string>
+    <string name="settings_row_language">Язык</string>
+    <string name="settings_row_language_sub">Системный, английский или русский</string>
+    <string name="language_system">Как в системе</string>
+    <string name="language_english">English</string>
+    <string name="language_russian">Русский</string>
+    <string name="settings_section_danger">Опасная зона</string>
+    <string name="settings_forget_all_destinations">Забыть все подключения</string>
+    <string name="settings_forget_all_destinations_sub">Удаляет сохранённые ссылки подключений. Настройки остаются.</string>
+    <string name="settings_reset_all">Сбросить все настройки</string>
+    <string name="settings_reset_all_sub">Вернуть все опции к значениям по умолчанию</string>
+    <string name="confirm_reset">Сбросить</string>
+    <string name="confirm_forget">Забыть</string>
+    <string name="confirm_delete">Удалить</string>
+    <string name="autofill_settings_sub">Когда страница входа запрашивает отображаемое имя, приложение заполнит его за вас.</string>
+    <string name="autofill_enable_title">Включить автозаполнение</string>
+    <string name="autofill_enable_sub">Нажать кнопку входа и подставить имя автоматически</string>
+    <string name="autofill_name_field_label">Отображаемое имя</string>
+    <string name="vp8_settings_sub">Настройка видеокадров по data-channel. Ниже fps и больше батч — меньше накладных расходов, но возможны подёргивания.</string>
+    <string name="dns_sub">Выберите DNS-резолвер, используемый внутри туннеля.</string>
+    <string name="dns_primary_label">Основной</string>
+    <string name="dns_secondary_label">Резервный</string>
+    <string name="proxy_sub">Локальная SOCKS5-точка, доступная приложениям, которые идут через туннель.</string>
+    <string name="proxy_port_field_label">Порт SOCKS5</string>
+    <string name="proxy_host_field_label">Хост SOCKS5</string>
+    <string name="proxy_host_hint">127.0.0.1</string>
+    <string name="proxy_auth_field_label">Аутентификация</string>
+    <string name="proxy_user_field_label">Логин</string>
+    <string name="proxy_pass_field_label">Пароль</string>
+    <string name="proxy_only_title">Только прокси</string>
+    <string name="proxy_only_sub">Без VPN, только SOCKS5</string>
+    <string name="proxy_auth_auto_sub">Сгенерированные логин / пароль</string>
+    <string name="proxy_auth_manual_sub">Использовать логин / пароль ниже</string>
+
+    <string name="activity_empty">Событий пока нет</string>
+    <string name="activity_copy">Копировать полностью</string>
+    <string name="activity_share">Поделиться файлом</string>
+
+    <!-- Cors.Connect service integration -->
+    <string name="cors_connect_button">Подключить Whitelist Bypass</string>
+    <string name="cors_connect_sub">Автоматически создать инстанс и добавить его в список</string>
+    <string name="cors_status_unavailable">Сервис Cors.Connect недоступен</string>
+    <string name="cors_status_signin_off">Вход на сервере не настроен</string>
+    <string name="cors_status_creating">Создание инстанса…</string>
+    <string name="cors_status_starting">Запуск инстанса…</string>
+    <string name="cors_status_ready">Инстанс готов — выберите его ниже и нажмите «Подключить»</string>
+    <string name="cors_status_claiming">Авторизация…</string>
+    <string name="cors_status_auth_required">Добавьте ссылку подписки, чтобы завершить авторизацию</string>
+    <string name="cors_status_claimed">Авторизован как %1$s</string>
+    <string name="cors_status_failed">Ошибка инстанса: %1$s</string>
+    <string name="cors_status_limited_5min">Сессия ограничена 5 минутами (нет прав на продление)</string>
+    <string name="cors_status_cap">Сервер занят, попробуйте позже</string>
+    <string name="cors_status_network">Не удаётся связаться с сервисом Cors.Connect</string>
+    <string name="cors_status_disabled">API приложения отключён на сервере</string>
+    <string name="cors_status_token_missing">Токен приложения не настроен</string>
+    <string name="cors_forget_instance">Забыть инстанс</string>
+    <string name="cors_forget_instance_sub">Очищает сохранённые инстанс и сессию</string>
+    <string name="cors_base_url">Сервер</string>
+    <string name="cors_base_url_sub">Базовый URL API Cors.Connect</string>
+    <string name="cors_base_url_label">URL сервера</string>
+    <string name="cors_section_service">Сервис Cors.Connect</string>
+    <string name="cors_toast_instance_forgotten">Инстанс забыт</string>
+    <string name="cors_toast_signed_out">Вы вышли из аккаунта</string>
+    <string name="cors_toast_signed_in">Вы вошли как %1$s</string>
+    <string name="cors_instance_name">Инстанс Cors.Connect</string>
+
+    <!-- Онбординг (редизайн Nocturne, прототип 1a) -->
+    <string name="ob_title">Быстрый старт</string>
+    <string name="ob_sub">Подключите устройство через Telegram-бота — подписки появятся в приложении автоматически.</string>
+    <string name="ob_auth">Войти через Telegram</string>
+    <string name="ob_skip">Настроить позже</string>
+    <string name="ob_step_1_title">Откройте @your_subscription_bot</string>
+    <string name="ob_step_1_sub">Раздел «Добавить устройство»</string>
+    <string name="ob_step_2_title">Нажмите «Добавить подписку»</string>
+    <string name="ob_step_2_sub">VLESS-подписки появятся в разделе Xray</string>
+    <string name="ob_step_3_title">Авторизуйтесь</string>
+    <string name="ob_step_3_sub">Настройки → Сервис Cors.Connect → Аккаунт</string>
+    <string name="ob_step_4_title">Выберите подключение</string>
+    <string name="ob_step_4_sub">Whitelist Bypass или сервер из подписки</string>
+    <string name="ob_free_note">Без подписки обход белых списков доступен на 5 минут, затем сессия обрывается. Войдите через Telegram, чтобы снять ограничение.</string>
+    <string name="auth_required_hint">Без авторизации обход вайтлистов работает 5 минут, затем сессия обрывается — добавьте подписку</string>
+    <string name="auth_hint_bot_link">Открыть @your_subscription_bot</string>
+</resources>

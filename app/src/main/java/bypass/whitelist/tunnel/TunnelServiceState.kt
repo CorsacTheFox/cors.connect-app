@@ -18,9 +18,18 @@ object TunnelServiceState {
     var logCallback: ParamCallback<String>? = null
 
     fun isTunnelActive(context: Context): Boolean {
-        val vpnActive = TunnelVpnService.instance?.let { it.isRunning || it.startInProgress || it.stopInProgress } == true
+        // A stop that outlived its hard cap (hung native engine shutdown) is
+        // not a running tunnel — counting it kept every reconnect attempt
+        // seeing "tunnel is running" until the app was manually restarted.
+        // ProxyService's stop is fully synchronous, so staleness can't apply.
+        val vpnActive = TunnelVpnService.instance?.let {
+            it.isRunning || it.startInProgress || (it.stopInProgress && !it.isStopStale())
+        } == true
         val proxyActive = ProxyService.instance?.let { it.isRunning || it.stopInProgress } == true
-        return vpnActive || proxyActive
+        val xrayActive = XrayVpnService.instance?.let {
+            it.isRunning || it.startInProgress || (it.stopInProgress && !it.isStopStale())
+        } == true
+        return vpnActive || proxyActive || xrayActive
     }
 
     fun isHeadlessSessionRunning(context: Context): Boolean {

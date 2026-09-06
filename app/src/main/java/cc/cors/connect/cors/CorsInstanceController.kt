@@ -46,7 +46,13 @@ class CorsInstanceController(
         fun onCorsStatus(text: String)
         /** Called on the main thread when the output_link is ready; the host should connect to it. */
         fun onCorsOutputReady(config: CallConfig)
-        /** Called on the main thread when Telegram login is required to complete the claim. */
+        /**
+         * Called on the main thread when no credential could be derived for
+         * the claim (no session, no legacy initData, no usable stored
+         * subscription). The host surfaces a status message — the fix is
+         * adding the subscription link, the same one used for the xray
+         * servers; there is no separate sign-in UI anymore.
+         */
         fun onCorsNeedsTelegram()
         /** Called on the main thread when the flow has succeeded (claimed). */
         fun onCorsClaimed(username: String)
@@ -83,7 +89,10 @@ class CorsInstanceController(
                 status("cors_status_creating")
                 val health = client.health()
                 if (!health.serviceAvailable) { failRes("cors_status_unavailable"); return@bg }
-                if (!health.telegramEnabled) post { host.onCorsStatus(resString("cors_status_telegram_off")) }
+                if (!health.telegramEnabled && !health.linkAuth) {
+                    // Neither auth backend is usable on the server.
+                    post { host.onCorsStatus(resString("cors_status_signin_off")) }
+                }
 
                 // Send Telegram initData when we have it: the server then REUSES
                 // any still-live instance for this user (no duplicate), or creates
@@ -155,34 +164,83 @@ class CorsInstanceController(
     }
 
     /**
-     * Calls [CorsClient.createInstance], falling back to the anonymous flow if
-     * the cached Telegram initData turns out to be stale/invalid (401).
+     * Calls [CorsClient.createInstance] with the best credential available,
+     * degrading gracefully when a cached one turns out stale (401):
      *
-     * initData is captured once (on Telegram sign-in) and cached indefinitely
-     * in [Prefs]; the server enforces a replay window on it (~24h by default),
-     * so it routinely goes stale between sign-in and use. Without this
-     * fallback, a 401 here used to abort the whole connect attempt and leave
-     * the stale initData in place, permanently breaking every future connect
-     * until the user found their way back to "Sign in with Telegram" manually.
-     * Clearing it here lets the flow fall through to the normal temp +
-     * claim_token path (which itself re-prompts for Telegram sign-in via
-     * [tryClaim]) instead of failing outright.
+     *  1. **Session token** (link-auth, primary): the server reuses/claims for
+     *     this user. On 401 it is silently re-established from the stored
+     *     subscription link ([silentRelogin]) and retried once.
+     *  2. **Telegram initData** (legacy): replay window ~24h; a 401 clears it.
+     *  3. **Anonymous**: a 5-min temp instance + claim_token; the user signs in
+     *     afterwards and [tryClaim] finishes the flow.
      */
     private fun createInstanceResilient(): CreateInstanceOut {
-        val initData = TelegramAuth.initData()
-        if (initData.isEmpty()) {
-            return client.createInstance(serviceId = null, telegramInitData = null)
-        }
-        return try {
-            client.createInstance(serviceId = null, telegramInitData = initData)
-        } catch (e: CorsException) {
-            if (e.code == 401) {
-                TelegramAuth.clear()
-                client.createInstance(serviceId = null, telegramInitData = null)
-            } else {
-                throw e
+        val session = Prefs.corsSessionToken
+        if (session.isNotBlank()) {
+            try {
+                return client.createInstance(sessionToken = session)
+            } catch (e: CorsException) {
+                if (e.code != 401) throw e
+                val refreshed = silentRelogin()
+                if (refreshed != null) {
+                    return try {
+                        client.createInstance(sessionToken = refreshed)
+                    } catch (e2: CorsException) {
+                        if (e2.code == 401) { clearSession(); anonymousCreate() } else throw e2
+                    }
+                }
+                clearSession()
             }
         }
+
+        val initData = TelegramAuth.initData()
+        if (initData.isNotEmpty()) {
+            try {
+                return client.createInstance(telegramInitData = initData)
+            } catch (e: CorsException) {
+                if (e.code == 401) TelegramAuth.clear() else throw e
+            }
+        }
+
+        // 3. Stored xray subscriptions: for most users their Remnawave
+        //    subscription link IS one of the app's xray subscription URLs —
+        //    try link-auth with them before degrading to the anonymous temp
+        //    flow (LinkAuth skips already-signed-in and firmly-rejected URLs).
+        if (LinkAuth.trySignInFromXraySubscriptions() != null) {
+            return try {
+                client.createInstance(sessionToken = Prefs.corsSessionToken)
+            } catch (e2: CorsException) {
+                if (e2.code == 401) { clearSession(); anonymousCreate() } else throw e2
+            }
+        }
+        return anonymousCreate()
+    }
+
+    private fun anonymousCreate(): CreateInstanceOut =
+        client.createInstance(serviceId = null, telegramInitData = null)
+
+    /**
+     * Re-establishes the session from the stored subscription link after the
+     * bearer expired (12h server TTL). Returns the fresh token, or null when
+     * no link is stored / the server refused it (the caller then degrades to
+     * the legacy/anonymous paths).
+     */
+    private fun silentRelogin(): String? {
+        val link = Prefs.corsSubscriptionLink
+        if (link.isBlank()) return null
+        return try {
+            val out = client.authLink(link)
+            Prefs.corsSessionToken = out.token
+            if (out.username.isNotEmpty()) Prefs.corsUsername = out.username
+            out.token
+        } catch (_: CorsException) {
+            null
+        }
+    }
+
+    private fun clearSession() {
+        Prefs.corsSessionToken = ""
+        Prefs.corsUsername = ""
     }
 
     /** Stops the current temp instance (idempotent). Safe to call from any thread. */
@@ -219,14 +277,28 @@ class CorsInstanceController(
         // nothing to claim.
         val claimToken = currentClaimToken
         if (claimToken.isNullOrEmpty()) return
+        // Prefer the link-auth session; fall back to the legacy Telegram
+        // initData. With neither, try the stored xray subscriptions (for most
+        // users their Remnawave subscription link IS one of them) — only then
+        // surface the "add your subscription" state.
+        var session = Prefs.corsSessionToken
         val initData = TelegramAuth.initData()
-        if (initData.isEmpty()) {
-            post { host.onCorsNeedsTelegram() }
-            return
+        if (session.isBlank() && initData.isEmpty()) {
+            session = if (LinkAuth.trySignInFromXraySubscriptions() != null) {
+                Prefs.corsSessionToken
+            } else {
+                post { host.onCorsNeedsTelegram() }
+                return
+            }
         }
         try {
             post { host.onCorsStatus(resString("cors_status_claiming")) }
-            val out = client.claim(currentInstanceId, claimToken, initData)
+            val out = client.claim(
+                instanceId = currentInstanceId,
+                claimToken = claimToken,
+                telegramInitData = initData.takeIf { it.isNotEmpty() },
+                sessionToken = session.takeIf { it.isNotBlank() },
+            )
             Prefs.corsSessionToken = out.token
             Prefs.corsUsername = out.username
             sessionToken = out.token
@@ -239,10 +311,14 @@ class CorsInstanceController(
             startHeartbeat()
             post { host.onCorsClaimed(out.username) }
         } catch (e: CorsException) {
-            // 401 → bad/expired initData; ask to re-login. Others are non-fatal for
-            // the ongoing session (the instance still runs under its temp TTL).
+            // 401 → bad/expired credential; ask to re-login. Others are non-fatal
+            // for the ongoing session (the instance still runs under its temp TTL).
             when (e.code) {
-                401 -> { TelegramAuth.clear(); post { host.onCorsNeedsTelegram() } }
+                401 -> {
+                    TelegramAuth.clear()
+                    clearSession()
+                    post { host.onCorsNeedsTelegram() }
+                }
                 409, 410 -> { /* already claimed / ended — nothing to do */ }
                 else -> post { host.onCorsStatus(detailMessage("cors_status_failed", e.detail)) }
             }

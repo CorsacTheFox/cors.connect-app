@@ -1,17 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Cors.Connect — dark blue brand palette (night) -->
-    <color name="accent_emerald">#FF5B9BFF</color>
-    <color name="accent_emerald_soft">#2E5B9BFF</color>
-    <color name="warn_amber">#FFE5B260</color>
-    <color name="error_red">#FFFF8585</color>
-    <color name="ink">#FFEAF1FB</color>
-    <color name="ink_2">#FFA6B6D6</color>
-    <color name="ink_3">#FF6377A0</color>
-    <color name="hair">#14EAF1FB</color>
-    <color name="hair_strong">#2EEAF1FB</color>
-    <color name="panel_bg">#FF0C1424</color>
-    <color name="panel_2">#FF111C32</color>
-    <color name="surface_bg">#FF070D18</color>
-    <color name="scrim_white_24">#3DFFFFFF</color>
+    <!-- Cors.Connect — Nocturne: neon-violet on near-black.
+         Дизайн только тёмный, поэтому values и values-night совпадают. -->
+    <color name="accent_emerald">#FFB485F5</color>
+    <color name="accent_emerald_soft">#29B485F5</color>
+    <color name="accent_deep">#FF8E60F0</color>
+    <color name="accent_glow">#59B485F5</color>
+    <color name="warn_amber">#FFE0A94A</color>
+    <color name="error_red">#FFE5484D</color>
+    <color name="ok_green">#FF3DDC84</color>
+
+    <color name="ink">#FFE9E9ED</color>
+    <color name="ink_2">#FFB2B6CA</color>
+    <color name="ink_3">#FF75798C</color>
+    <color name="hair">#24B485F5</color>
+    <color name="hair_strong">#3DB485F5</color>
+
+    <color name="panel_bg">#FF15161F</color>
+    <color name="panel_2">#FF171922</color>
+    <color name="surface_bg">#FF0B0C14</color>
+    <color name="scrim_white_24">#1FFFFFFF</color>
+    <color name="scrim_panel">#F2171922</color>
+    <color name="scrim_panel_strong">#F70B0C14</color>
+
+    <!-- Animated backdrop -->
+    <color name="backdrop_top">#FF0B0C14</color>
+    <color name="backdrop_bottom">#FF08090F</color>
+    <color name="blob_1">#6B9E64F0</color>
+    <color name="blob_2">#576E50DC</color>
+    <color name="dot_grid">#26B485F5</color>
+
+    <!-- Redesign helpers (точные alpha из прототипа) -->
+    <color name="hair_ink">#12E9E9ED</color>
+    <color name="status_dot_idle">#40E9E9ED</color>
+    <color name="accent_wash">#1FB485F5</color>
+    <color name="nav_item_active_bg">#1AB485F5</color>
+    <color name="hero_core_top">#FF1A1226</color>
+    <color name="hero_core_bottom">#FF101017</color>
+    <color name="hero_inner_glow">#38B485F5</color>
+    <color name="row_bg">#FF1E2130</color>
+    <color name="row_ink_34">#57E9E9ED</color>
 </resources>

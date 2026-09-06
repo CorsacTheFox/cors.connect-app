@@ -153,6 +153,23 @@ class RelayController(
     private fun checkPortOrAbort(): Boolean {
         val socksPort = Prefs.socksPort
         if (PortGuard.ensurePortFree(socksPort)) return true
+        // The previous session's in-process joiner can't be killed (same PID),
+        // but stopJoiner() usually does release the socket a beat later — it's
+        // just still in the OS close/TIME_WAIT window. Give it a longer grace
+        // before giving up, so a quick reconnect after a disconnect doesn't
+        // dead-end on PORT_BUSY until the app is restarted.
+        for (attempt in 1..12) {
+            if (!isRunning) return false
+            try {
+                Thread.sleep(500)
+            } catch (_: InterruptedException) {
+                return false
+            }
+            if (PortGuard.isPortAvailable(socksPort)) {
+                onLog("SOCKS5 port $socksPort freed after grace (attempt $attempt)")
+                return true
+            }
+        }
         onLog("SOCKS5 port $socksPort is busy and could not be freed")
         onStatus(VpnStatus.PORT_BUSY)
         isRunning = false

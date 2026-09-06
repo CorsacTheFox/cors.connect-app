@@ -1,38 +1,40 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
 }
 
-val versionMajor = 1
-val versionMinor = 0
-val versionPatch = 0
+val versionMajor = 0
+val versionMinor = 5
+val versionPatch = 5
 val versionBuild = System.getenv("BUILD_NUMBER")?.toIntOrNull() ?: 0
 
+// Legacy builds (the "0.3" release) already shipped versionCode 1_000_000
+// (their internal versionName was 1.0.0), so 0.4 must code above it or
+// Android refuses the install as a downgrade. (major + 1) keeps the scheme
+// collision-free when major eventually bumps: 1.0.0 -> 2_000_000.
+val computedVersionCode: Int =
+    1_000_000 * (versionMajor + 1) + 1_000 * versionMinor + versionPatch + versionBuild
+
 // ---- Cors.Connect service configuration -------------------------------------
-// Values are resolved in this order: environment variable -> local.properties
-// (gitignored, per-developer) -> a safe placeholder default.
-// See CONFIGURATION.md for how to set these.
-val localProperties = Properties().apply {
-    val localPropsFile = rootProject.file("local.properties")
-    if (localPropsFile.exists()) {
-        localPropsFile.inputStream().use { load(it) }
-    }
+// NOTE: this public repo ships only placeholders. Supply real values via env
+// vars (CI) or a gitignored local.properties. See SECURITY_CLEANUP.md.
+//
+// Helper: read from an env var, else from local.properties, else the placeholder.
+val localProps = java.util.Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
 }
-fun configValue(envName: String, propName: String, default: String): String =
-    System.getenv(envName) ?: localProperties.getProperty(propName) ?: default
+fun cfg(key: String, default: String): String =
+    System.getenv(key) ?: localProps.getProperty(key) ?: default
 
 // Base URL of the instance-creation service.
-val corsBaseUrl: String =
-    configValue("CORS_BASE_URL", "CORS_BASE_URL", "https://example.invalid/replace-with-your-endpoint")
-        .removeSuffix("/")
+val corsBaseUrl: String = cfg("CORS_BASE_URL", "https://example.invalid/replace-with-your-endpoint").removeSuffix("/")
 // Shared static secret the server expects in the X-App-Token header (WB_APP_TOKEN).
-// Must be set via the CORS_APP_TOKEN env var or local.properties; there is no
-// working default. CorsClient.isConfigured checks for this exact placeholder.
-val corsAppToken: String = configValue("CORS_APP_TOKEN", "CORS_APP_TOKEN", "REPLACE_WITH_WB_APP_TOKEN")
+// While left as the placeholder, CorsClient.isConfigured stays false and the
+// instance-creation API is not called.
+val corsAppToken: String = cfg("CORS_APP_TOKEN", "REPLACE_WITH_WB_APP_TOKEN")
 // Telegram bot username the app opens to obtain initData for the claim flow.
-val corsTgBot: String = configValue("CORS_TG_BOT", "CORS_TG_BOT", "REPLACE_WITH_TELEGRAM_BOT_USERNAME")
+val corsTgBot: String = cfg("CORS_TG_BOT", "REPLACE_WITH_TELEGRAM_BOT_USERNAME")
 // ----------------------------------------------------------------------------
 
 android {
@@ -43,9 +45,9 @@ android {
 
     defaultConfig {
         applicationId = "cc.cors.connect"
-        minSdk = 23
+        minSdk = 24
         targetSdk = 36
-        versionCode = 1_000_000 * versionMajor + 1_000 * versionMinor + versionPatch + versionBuild
+        versionCode = computedVersionCode
         versionName = "$versionMajor.$versionMinor.$versionPatch"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -59,21 +61,28 @@ android {
         buildConfig = true
     }
 
-    // AndroidManifest sets android:extractNativeLibs="true", so the packaging
-    // must use legacy (uncompressed-free) packaging for native libs.
     packaging {
         jniLibs {
             useLegacyPackaging = true
+            pickFirsts.add("**/libgojni.so")
+        }
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
 
-    // No custom debug signingConfig: AGP's built-in "debug" config already
-    // points at the auto-generated ~/.android/debug.keystore (well-known
-    // "android"/"android" credentials), so nothing needs to be committed here.
-    // NOTE: release currently reuses the debug signing config as a placeholder.
-    // Before shipping a real release build, create your own release keystore
-    // and signingConfig — see CONFIGURATION.md "Release signing" section.
+    // The committed debug.keystore was removed for the public repo. The debug
+    // build now uses the Android Gradle Plugin's auto-generated
+    // ~/.android/debug.keystore (standard android/android credentials).
+    //
+    // Before shipping a real release, add your own signing config sourcing the
+    // keystore path and passwords from env vars / local.properties — see
+    // SECURITY_CLEANUP.md.
+
     buildTypes {
+        debug {
+            // default debug signing (auto-generated keystore)
+        }
         release {
             isMinifyEnabled = false
             signingConfig = signingConfigs.getByName("debug")

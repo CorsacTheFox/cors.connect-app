@@ -304,7 +304,7 @@ class JsHookJoinFragment : Fragment(), JoinSessionShutdown {
         fun onTunnelReady() {
             if (!isSessionAlive()) return
             host?.appendLog("Tunnel ready, starting VPN...")
-            host?.onJoinStatusText("Relay ready, starting local VPN")
+            host?.onJoinStatusText(getString(R.string.relay_ready_starting_vpn))
             activity?.runOnUiThread { host?.requestVpn() }
         }
 

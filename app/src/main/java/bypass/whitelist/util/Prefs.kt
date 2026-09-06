@@ -5,8 +5,11 @@ import android.content.SharedPreferences
 import androidx.core.content.edit
 import bypass.whitelist.BuildConfig
 import bypass.whitelist.tunnel.CallConfig
+import bypass.whitelist.tunnel.ConnectionMode
 import bypass.whitelist.tunnel.SplitTunnelingMode
 import bypass.whitelist.tunnel.TunnelMode
+import bypass.whitelist.xray.XrayServer
+import bypass.whitelist.xray.XraySubscription
 
 object Prefs {
 
@@ -19,6 +22,10 @@ object Prefs {
     var connectOnStart: Boolean
         get() = prefs.getBoolean(PrefsKeys.CONNECT_ON_START, false)
         set(value) = prefs.edit { putBoolean(PrefsKeys.CONNECT_ON_START, value) }
+
+    var onboardingDone: Boolean
+        get() = prefs.getBoolean(PrefsKeys.ONBOARDING_DONE, false)
+        set(value) = prefs.edit { putBoolean(PrefsKeys.ONBOARDING_DONE, value) }
 
     var tunnelMode: TunnelMode
         get() {
@@ -136,6 +143,122 @@ object Prefs {
         get() = prefs.getString(PrefsKeys.ACTIVE_DESTINATION_ID, "") ?: ""
         set(value) = prefs.edit { putString(PrefsKeys.ACTIVE_DESTINATION_ID, value) }
 
+    // ---- Standard Xray connections ---------------------------------------
+
+    /**
+     * Type of whichever connection is currently selected as "active" in the
+     * unified Main screen list (updated whenever the user taps a row, either
+     * a call/instance entry or an Xray server entry). Used to disambiguate
+     * [activeDestinationId] vs [xrayActiveServerId] as *the* active connection
+     * now that there's a single list instead of separate tabs.
+     */
+    var connectionMode: ConnectionMode
+        get() {
+            val name = prefs.getString(PrefsKeys.CONNECTION_MODE, ConnectionMode.INSTANCE.name)!!
+            return try {
+                ConnectionMode.valueOf(name)
+            } catch (_: IllegalArgumentException) {
+                ConnectionMode.INSTANCE
+            }
+        }
+        set(value) = prefs.edit { putString(PrefsKeys.CONNECTION_MODE, value.name) }
+
+    var xraySavedServers: List<XrayServer>
+        get() = XrayServer.listFromJson(prefs.getString(PrefsKeys.XRAY_SAVED_SERVERS, "") ?: "")
+        set(value) = prefs.edit { putString(PrefsKeys.XRAY_SAVED_SERVERS, XrayServer.listToJson(value)) }
+
+    var xrayActiveServerId: String
+        get() = prefs.getString(PrefsKeys.XRAY_ACTIVE_SERVER_ID, "") ?: ""
+        set(value) = prefs.edit { putString(PrefsKeys.XRAY_ACTIVE_SERVER_ID, value) }
+
+    var xraySubscriptions: List<XraySubscription>
+        get() = XraySubscription.listFromJson(prefs.getString(PrefsKeys.XRAY_SUBSCRIPTIONS, "") ?: "")
+        set(value) = prefs.edit { putString(PrefsKeys.XRAY_SUBSCRIPTIONS, XraySubscription.listToJson(value)) }
+
+    var xraySocksPort: Long
+        get() = prefs.getLong(PrefsKeys.XRAY_SOCKS_PORT, Ports.DEFAULT_XRAY_SOCKS)
+        set(value) = prefs.edit { putLong(PrefsKeys.XRAY_SOCKS_PORT, value) }
+
+    /**
+     * Loopback SOCKS5 port the *currently selected* connection's core exposes:
+     * the Whitelist Bypass relay uses [socksPort] (1080), the standard Xray
+     * core uses [xraySocksPort] (1081). The two are distinct so a still-
+     * releasing relay can't block the other mode's next connect.
+     */
+    val activeLoopbackSocksPort: Long
+        get() = if (connectionMode == ConnectionMode.XRAY) xraySocksPort else socksPort
+
+    // Split tunneling is shared globally: see [splitTunnelingMode]/[splitTunnelingPackages]
+    // above, used by both TunnelVpnService (instance/call) and XrayVpnService.
+
+    val activeXrayServer: XrayServer?
+        get() {
+            val id = xrayActiveServerId
+            if (id.isEmpty()) return null
+            return xraySavedServers.firstOrNull { it.id == id }
+        }
+
+    /** Adds (or replaces, by id) a manually-added server and makes it the active connection. */
+    fun addXrayServer(server: XrayServer) {
+        val list = xraySavedServers.toMutableList()
+        list.removeAll { it.id == server.id }
+        list.add(0, server)
+        xraySavedServers = list
+        xrayActiveServerId = server.id
+        connectionMode = ConnectionMode.XRAY
+    }
+
+    /**
+     * Merges servers expanded from a subscription refresh: replaces every
+     * previously-saved server tagged with [subscriptionId], keeping manually
+     * added servers and other subscriptions untouched. The active selection
+     * is only reassigned when the previously active server belonged to this
+     * subscription and disappeared from the new set — adding a subscription
+     * must never steal the selection from the user's current connection.
+     */
+    fun replaceSubscriptionServers(subscriptionId: String, servers: List<XrayServer>) {
+        val keepActive = xrayActiveServerId
+        val activeBelongedToThisSub =
+            keepActive.isNotEmpty() &&
+                xraySavedServers.any { it.id == keepActive && it.subscriptionId == subscriptionId }
+        val list = xraySavedServers.filter { it.subscriptionId != subscriptionId }.toMutableList()
+        list.addAll(servers)
+        xraySavedServers = list
+        if (activeBelongedToThisSub && list.none { it.id == keepActive }) {
+            xrayActiveServerId = list.firstOrNull()?.id ?: ""
+        }
+    }
+
+    fun removeXrayServer(id: String) {
+        val list = xraySavedServers.filter { it.id != id }
+        xraySavedServers = list
+        if (xrayActiveServerId == id) {
+            xrayActiveServerId = list.firstOrNull()?.id ?: ""
+        }
+    }
+
+    fun renameXrayServer(id: String, newName: String) {
+        xraySavedServers = xraySavedServers.map { if (it.id == id) it.copy(remark = newName) else it }
+    }
+
+    fun addOrUpdateXraySubscription(subscription: XraySubscription) {
+        val list = xraySubscriptions.toMutableList()
+        val index = list.indexOfFirst { it.id == subscription.id }
+        if (index != -1) list[index] = subscription else list.add(0, subscription)
+        xraySubscriptions = list
+    }
+
+    /** Removes a subscription and every server it expanded to. */
+    fun removeXraySubscription(id: String) {
+        xraySubscriptions = xraySubscriptions.filter { it.id != id }
+        val remainingServers = xraySavedServers.filter { it.subscriptionId != id }
+        val removedActive = xraySavedServers.any { it.id == xrayActiveServerId && it.subscriptionId == id }
+        xraySavedServers = remainingServers
+        if (removedActive) {
+            xrayActiveServerId = remainingServers.firstOrNull()?.id ?: ""
+        }
+    }
+
     // ---- Cors.Connect service state -------------------------------------
 
     /**
@@ -169,6 +292,15 @@ object Prefs {
         get() = prefs.getString(PrefsKeys.CORS_SESSION_TOKEN, "") ?: ""
         set(value) = prefs.edit { putString(PrefsKeys.CORS_SESSION_TOKEN, value) }
 
+    /**
+     * The Remnawave subscription link used for sign-in (link-auth). Stored so
+     * the session can be silently re-established after the session token
+     * expires, without asking the user to paste the link again.
+     */
+    var corsSubscriptionLink: String
+        get() = prefs.getString(PrefsKeys.CORS_SUBSCRIPTION_LINK, "") ?: ""
+        set(value) = prefs.edit { putString(PrefsKeys.CORS_SUBSCRIPTION_LINK, value.trim()) }
+
     /** Telegram username resolved by the server during claim/login. */
     var corsUsername: String
         get() = prefs.getString(PrefsKeys.CORS_USERNAME, "") ?: ""
@@ -176,12 +308,37 @@ object Prefs {
 
     val corsSignedIn: Boolean get() = corsUsername.isNotEmpty()
 
+    /**
+     * Stable per-install device identifier sent as the `x-hwid` header on
+     * subscription requests. Remnawave (and other panels) only record a device
+     * in hwid-inspector / per-device stats when this header is present, so it
+     * must stay constant for the life of the install. Generated lazily on first
+     * read and persisted; cleared only on full app data wipe.
+     */
+    val deviceHwid: String
+        get() {
+            prefs.getString(PrefsKeys.DEVICE_HWID, null)?.let { return it }
+            val generated = java.util.UUID.randomUUID().toString()
+            prefs.edit { putString(PrefsKeys.DEVICE_HWID, generated) }
+            return generated
+        }
+
     var themeMode: ThemeMode
         get() {
             val name = prefs.getString(PrefsKeys.THEME_MODE, ThemeMode.SYSTEM.name) ?: ThemeMode.SYSTEM.name
             return try { ThemeMode.valueOf(name) } catch (_: IllegalArgumentException) { ThemeMode.SYSTEM }
         }
         set(value) = prefs.edit { putString(PrefsKeys.THEME_MODE, value.name) }
+
+    /** Epoch ms of the last automatic update check (0 = never). */
+    var lastUpdateCheck: Long
+        get() = prefs.getLong(PrefsKeys.LAST_UPDATE_CHECK, 0L)
+        set(value) = prefs.edit { putLong(PrefsKeys.LAST_UPDATE_CHECK, value) }
+
+    /** Whether the battery-optimization reminder was already shown once. */
+    var batteryReminderShown: Boolean
+        get() = prefs.getBoolean(PrefsKeys.BATTERY_REMINDER_SHOWN, false)
+        set(value) = prefs.edit { putBoolean(PrefsKeys.BATTERY_REMINDER_SHOWN, value) }
 
     val activeDestination: CallConfig?
         get() {
@@ -220,6 +377,7 @@ object Prefs {
         list.add(0, config)
         savedDestinations = list
         activeDestinationId = config.id
+        connectionMode = ConnectionMode.INSTANCE
     }
 
     fun removeDestination(id: String) {
@@ -238,11 +396,24 @@ object Prefs {
     fun resetAllSettings() {
         val keepDestinations = prefs.getString(PrefsKeys.SAVED_DESTINATIONS, null)
         val keepActiveId = prefs.getString(PrefsKeys.ACTIVE_DESTINATION_ID, null)
+        val keepXrayServers = prefs.getString(PrefsKeys.XRAY_SAVED_SERVERS, null)
+        val keepXrayActiveId = prefs.getString(PrefsKeys.XRAY_ACTIVE_SERVER_ID, null)
+        val keepXraySubscriptions = prefs.getString(PrefsKeys.XRAY_SUBSCRIPTIONS, null)
         prefs.edit {
             clear()
             if (keepDestinations != null) putString(PrefsKeys.SAVED_DESTINATIONS, keepDestinations)
             if (keepActiveId != null) putString(PrefsKeys.ACTIVE_DESTINATION_ID, keepActiveId)
+            if (keepXrayServers != null) putString(PrefsKeys.XRAY_SAVED_SERVERS, keepXrayServers)
+            if (keepXrayActiveId != null) putString(PrefsKeys.XRAY_ACTIVE_SERVER_ID, keepXrayActiveId)
+            if (keepXraySubscriptions != null) putString(PrefsKeys.XRAY_SUBSCRIPTIONS, keepXraySubscriptions)
         }
+    }
+
+    /** Clears every imported Xray server and subscription (keeps other settings). */
+    fun forgetAllXrayServers() {
+        xraySavedServers = emptyList()
+        xraySubscriptions = emptyList()
+        xrayActiveServerId = ""
     }
 
     /** Clears the stored Cors.Connect instance + session (keeps Telegram initData). */
@@ -255,11 +426,12 @@ object Prefs {
         }
     }
 
-    /** Full sign-out: clears session, username and initData. */
+    /** Full sign-out: clears session, username, subscription link and initData. */
     fun corsSignOut() {
         prefs.edit {
             remove(PrefsKeys.CORS_SESSION_TOKEN)
             remove(PrefsKeys.CORS_USERNAME)
+            remove(PrefsKeys.CORS_SUBSCRIPTION_LINK)
             remove(PrefsKeys.CORS_TG_INIT_DATA)
             remove(PrefsKeys.CORS_INSTANCE_ID)
             remove(PrefsKeys.CORS_CLAIM_TOKEN)

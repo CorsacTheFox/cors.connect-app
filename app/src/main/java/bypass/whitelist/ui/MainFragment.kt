@@ -4,28 +4,46 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import android.widget.Toast
 import androidx.fragment.app.Fragment
 import bypass.whitelist.R
-import bypass.whitelist.tunnel.CallConfig
-import bypass.whitelist.tunnel.CallPlatform
+import bypass.whitelist.tunnel.ConnectTarget
+import bypass.whitelist.tunnel.ConnectionMode
 import bypass.whitelist.tunnel.TunnelMode
 import bypass.whitelist.tunnel.VpnStatus
 import bypass.whitelist.util.Prefs
+import bypass.whitelist.xray.XrayServer
+import bypass.whitelist.xray.XraySubscriptionRefresher
+import bypass.whitelist.xray.isSupportedXrayShareLink
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 
-class MainFragment : Fragment(R.layout.fragment_main_screen) {
+class MainFragment : Fragment(R.layout.fragment_main_screen), XrayServersListener {
 
     private val scanQrLauncher = registerForActivityResult(ScanContract()) { result ->
         val scanned = result.contents?.trim().orEmpty()
-        if (scanned.isNotEmpty()) {
-            AddDestinationSheet.show(parentFragmentManager, scanned)
+        if (scanned.isEmpty()) return@registerForActivityResult
+        when {
+            // Xray share link -> the "add server" sheet as before.
+            scanned.isSupportedXrayShareLink() ->
+                AddXraySubscriptionSheet.show(parentFragmentManager, scanned)
+            // Remnawave subscription link (…/sub/<token> or a custom sub
+            // domain): it doubles as an xray subscription feed — the add
+            // sheet imports the servers AND triggers the implicit
+            // Cors.Connect sign-in with the same link.
+            scanned.startsWith("http", ignoreCase = true) && scanned.contains("/sub/") ->
+                AddXraySubscriptionSheet.show(parentFragmentManager, scanned)
+            else ->
+                Toast.makeText(requireContext(), R.string.scan_qr_unsupported, Toast.LENGTH_SHORT).show()
         }
     }
 
     private var content: MainFragmentView? = null
     private var pendingStatus: VpnStatus? = null
     private var connectedSinceMs: Long = 0L
+    private var lastRxBytes: Long = 0L
+    private var lastTxBytes: Long = 0L
+    private var lastSampleMs: Long = 0L
     private val tickHandler = Handler(Looper.getMainLooper())
     private val tickRunnable = object : Runnable {
         override fun run() {
@@ -34,33 +52,47 @@ class MainFragment : Fragment(R.layout.fragment_main_screen) {
         }
     }
 
+    /** One row of the "service availability" check: outcome + RTT when up. */
+    data class ServiceStatus(val name: String, val ok: Boolean, val rttMs: Int)
+
     interface Host {
-        fun onConnectPressed(config: CallConfig)
+        fun onConnectPressed(target: ConnectTarget)
         fun onDisconnectPressed()
-        fun onPingPressed(callback: (success: Boolean, rttMs: Int) -> Unit)
+        fun onServiceCheckPressed(callback: (List<ServiceStatus>) -> Unit)
         fun isTunnelActive(): Boolean
         fun currentStatus(): VpnStatus?
-        fun onCorsConnectPressed()
-        fun onCorsSignInPressed()
+    }
+
+    companion object {
+        /**
+         * Popular services probed by the availability button, in display
+         * order: display name → host used for the probe (HTTPS :443).
+         */
+        val SERVICE_TARGETS: List<Pair<String, String>> = listOf(
+            "Instagram" to "instagram.com",
+            "Facebook" to "facebook.com",
+            "X / Twitter" to "x.com",
+            "YouTube" to "youtube.com",
+            "Discord" to "discord.com",
+            "Signal" to "signal.org",
+            "LinkedIn" to "linkedin.com",
+            "ChatGPT" to "chatgpt.com",
+        )
     }
 
     override fun onViewCreated(rootView: View, savedInstanceState: Bundle?) {
         val container = MainFragmentView(rootView)
         content = container
 
-        container.bindCalls(Prefs.savedDestinations, Prefs.activeDestinationId)
+        container.bindXrayServers(Prefs.xraySavedServers, Prefs.xrayActiveServerId)
         container.bindHero(connected = isHostConnected(), status = hostStatus())
         if (!isResumed) container.pauseAnimations()
 
-        container.onAddCallClicked = {
-            AddDestinationSheet.show(parentFragmentManager)
-        }
-        container.onCorsConnectClicked = {
-            host()?.onCorsConnectPressed()
-        }
-        container.onCorsSignInClicked = {
-            host()?.onCorsSignInPressed()
-        }
+        // The only thing left to "add" is an Xray subscription/server — the
+        // Whitelist Bypass entry is fixed and always in the list.
+        container.onAddCallClicked = { AddXraySubscriptionSheet.show(parentFragmentManager) }
+        container.onRefreshSubscriptionsClicked = { refreshSubscriptions() }
+        container.onPingCheckClicked = { content?.invalidatePings() }
         container.onScanQrClicked = {
             scanQrLauncher.launch(
                 ScanOptions()
@@ -75,23 +107,81 @@ class MainFragment : Fragment(R.layout.fragment_main_screen) {
             if (isHostConnected() || isHostConnecting()) {
                 host()?.onDisconnectPressed()
             } else {
-                val active = Prefs.activeDestination
-                if (active != null) {
-                    host()?.onConnectPressed(active)
+                when (Prefs.connectionMode) {
+                    ConnectionMode.INSTANCE -> confirmWhitelistThenConnect {
+                        host()?.onConnectPressed(ConnectTarget.WhitelistBypass)
+                    }
+                    ConnectionMode.XRAY -> Prefs.activeXrayServer?.let {
+                        host()?.onConnectPressed(ConnectTarget.Xray(it))
+                    }
                 }
             }
         }
-        container.onPingPressed = {
-            container.showPingRunning()
-            host()?.onPingPressed { success, rttMs ->
-                container.showPingResult(success, rttMs)
+        container.onServiceCheckPressed = {
+            container.showServicesRunning()
+            ServiceCheckDialog.open(parentFragmentManager)
+            host()?.onServiceCheckPressed { results ->
+                // The check is sequential — every callback carries one more
+                // row; only the final batch resets the button label.
+                if (results.size >= SERVICE_TARGETS.size) {
+                    container.showServicesResults(results)
+                }
+                ServiceCheckDialog.publish(results)
             }
         }
-        container.onCallSelected = { config ->
-            Prefs.activeDestinationId = config.id
-            container.bindCalls(Prefs.savedDestinations, Prefs.activeDestinationId)
+        // Quick-access chips: the settings a user tweaks often, right on the
+        // main screen instead of buried in the settings tab.
+        container.onQuickTunnelModeClicked = {
+            ChoiceActionSheet.show(
+                manager = parentFragmentManager,
+                title = getString(R.string.settings_row_tunnel_mode),
+                options = TunnelMode.entries.map { ChoiceActionSheet.Option(it.name, getString(it.labelRes)) },
+                selectedId = Prefs.tunnelMode.name,
+            ) { picked ->
+                val newMode = TunnelMode.valueOf(picked.id)
+                if (newMode != Prefs.tunnelMode) {
+                    Prefs.tunnelMode = newMode
+                    (activity as? SettingsScreenFragment.Host)?.onTunnelModeChanged(newMode)
+                }
+            }
         }
-        container.onCallLongPressed = ::showRowMenu
+        container.onQuickSplitClicked = {
+            (activity as? MainActivityHost)?.pushSubPage(SplitTunnelingScreenFragment())
+        }
+        container.onQuickDnsClicked = { DnsActionSheet.show(parentFragmentManager) { } }
+        // Subscription bot chip — opens @your_subscription_bot in Telegram (or the
+        // web profile as fallback) to check / buy a subscription.
+        container.onQuickBotClicked = {
+            openSubscriptionBot()
+        }
+        // The "5-minute limit" warning links straight to the bot to get a subscription.
+        container.onAuthHintBotClicked = {
+            openSubscriptionBot()
+        }
+        container.onAllServersClicked = {
+            (activity as? MainActivityHost)?.openServersTab()
+        }
+        container.onEntrySelected = { target ->
+            when (target) {
+                is ConnectTarget.WhitelistBypass -> {
+                    Prefs.connectionMode = ConnectionMode.INSTANCE
+                }
+                is ConnectTarget.Xray -> {
+                    Prefs.xrayActiveServerId = target.server.id
+                    Prefs.connectionMode = ConnectionMode.XRAY
+                }
+                is ConnectTarget.Instance -> Unit // never selected from the list
+            }
+            container.refresh()
+        }
+        container.onEntryLongPressed = { target ->
+            when (target) {
+                is ConnectTarget.Xray -> showServerRowMenu(target.server)
+                is ConnectTarget.WhitelistBypass, is ConnectTarget.Instance -> Unit // no per-row menu
+            }
+        }
+
+        updateSubscriptionStats()
 
         pendingStatus?.let { container.bindStatus(it) }
         pendingStatus = null
@@ -99,8 +189,9 @@ class MainFragment : Fragment(R.layout.fragment_main_screen) {
 
     override fun onResume() {
         super.onResume()
-        content?.bindCalls(Prefs.savedDestinations, Prefs.activeDestinationId)
+        content?.bindXrayServers(Prefs.xraySavedServers, Prefs.xrayActiveServerId)
         content?.bindHero(connected = isHostConnected(), status = hostStatus())
+        updateSubscriptionStats()
         content?.resumeAnimations()
         if (isHostConnected()) {
             tickHandler.removeCallbacks(tickRunnable)
@@ -135,17 +226,13 @@ class MainFragment : Fragment(R.layout.fragment_main_screen) {
         content?.bindStatusText(text)
     }
 
-    /** Toggles the explicit "Sign in with Telegram" action on the Main screen. */
-    fun onCorsAuthRequired(required: Boolean) {
-        content?.setCorsSignInVisible(required)
-    }
-
     fun onConnectedChanged(connected: Boolean) {
         if (connected) {
             if (connectedSinceMs == 0L) connectedSinceMs = System.currentTimeMillis()
         } else {
             connectedSinceMs = 0L
         }
+        lastSampleMs = 0L
         if (!isResumed) return
         content?.bindHero(connected = connected, status = hostStatus())
         if (connected) {
@@ -157,101 +244,141 @@ class MainFragment : Fragment(R.layout.fragment_main_screen) {
         }
     }
 
+    /**
+     * Still called from [bypass.whitelist.MainActivity.onForgetAllDestinations]
+     * (Settings screen) — kept as a plain refresh now that the list no longer
+     * renders per-instance rows to bind.
+     */
     fun onDestinationsChanged() {
-        content?.bindCalls(Prefs.savedDestinations, Prefs.activeDestinationId)
+        content?.refresh()
     }
 
-    private fun showRowMenu(config: CallConfig) {
-        val tunnelMode = (config.tunnelMode ?: Prefs.tunnelMode).forPlatform(config.platform)
-        val vp8Sub = buildString {
-            append(getString(R.string.settings_row_vp8_sub, config.vp8Fps ?: Prefs.vp8Fps, config.vp8Batch ?: Prefs.vp8Batch))
-            if (config.dualTrack ?: Prefs.dualTrack) append(" / ").append(getString(R.string.settings_row_vp8_flag_dual))
-            if (config.reliable ?: Prefs.reliable) append(" / ").append(getString(R.string.settings_row_vp8_flag_kcp))
+    override fun onXrayServersChanged() {
+        content?.bindXrayServers(Prefs.xraySavedServers, Prefs.xrayActiveServerId)
+        // A subscription import can complete the implicit Cors.Connect
+        // sign-in — re-evaluate the "authorization required" hint.
+        content?.updateAuthHint()
+        // A refresh/import may have brought fresh quota numbers.
+        content?.let { updateSubscriptionStats() }
+    }
+
+    /**
+     * Manual subscription refresh from the header button: re-fetches every
+     * subscription and swaps the server list without touching the running
+     * tunnel (see [XraySubscriptionRefresher]). Toasts the outcome and
+     * re-renders the main list with the fresh servers.
+     */
+    private fun refreshSubscriptions() {
+        val view = content ?: return
+        if (Prefs.xraySubscriptions.isEmpty()) {
+            Toast.makeText(requireContext(), R.string.xray_refresh_none, Toast.LENGTH_SHORT).show()
+            return
         }
+        view.showSubscriptionsRefreshing()
+        XraySubscriptionRefresher.refreshAll { result ->
+            if (!isAdded) return@refreshAll
+            view.stopSubscriptionsRefreshing()
+            view.bindXrayServers(Prefs.xraySavedServers, Prefs.xrayActiveServerId)
+            // The refresh may have brought fresh quota numbers (traffic/expiry).
+            updateSubscriptionStats()
+            val res = when {
+                result.okSubscriptions == 0 -> getString(R.string.xray_refresh_failed)
+                else -> getString(
+                    R.string.xray_refresh_done,
+                    result.okSubscriptions,
+                    result.totalSubscriptions,
+                    result.totalServers,
+                )
+            }
+            Toast.makeText(requireContext(), res, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showServerRowMenu(server: XrayServer) {
         MenuActionSheet.show(
             manager = parentFragmentManager,
-            title = config.name,
-            subtitle = config.url,
+            title = server.remark,
+            subtitle = server.summary,
             items = listOf(
-                MenuActionSheet.MenuItem("tunnel", getString(R.string.settings_row_tunnel_mode), R.drawable.ic_setting_tunnel, value = tunnelMode.label),
-                MenuActionSheet.MenuItem("vp8", getString(R.string.settings_row_vp8), R.drawable.ic_setting_vp8, value = vp8Sub),
-                MenuActionSheet.MenuItem("rename", getString(R.string.destination_menu_rename), R.drawable.ic_action_pencil),
-                MenuActionSheet.MenuItem("delete", getString(R.string.destination_menu_delete), R.drawable.ic_setting_trash, danger = true),
+                MenuActionSheet.MenuItem("active", getString(R.string.xray_server_menu_set_active), R.drawable.ic_check),
+                MenuActionSheet.MenuItem("rename", getString(R.string.xray_server_menu_rename), R.drawable.ic_action_pencil),
+                MenuActionSheet.MenuItem("delete", getString(R.string.xray_server_menu_delete), R.drawable.ic_setting_trash, danger = true),
             ),
         ) { item ->
             when (item.id) {
-                "tunnel" -> editTunnelMode(config)
-                "vp8" -> editVp8(config)
-                "rename" -> promptRename(config)
-                "delete" -> confirmDelete(config)
+                "active" -> {
+                    Prefs.xrayActiveServerId = server.id
+                    onXrayServersChanged()
+                }
+                "rename" -> promptRenameServer(server)
+                "delete" -> confirmDeleteServer(server)
             }
         }
     }
 
-    private fun editTunnelMode(config: CallConfig) {
-        val current = (config.tunnelMode ?: Prefs.tunnelMode).forPlatform(config.platform)
-        ChoiceActionSheet.show(
-            manager = parentFragmentManager,
-            title = getString(R.string.settings_row_tunnel_mode),
-            options = TunnelMode.entries.filter { it == TunnelMode.VIDEO || (config.platform != CallPlatform.TELEMOST && config.platform != CallPlatform.DION) }.map { ChoiceActionSheet.Option(it.name, it.label) },
-            selectedId = current.name,
-        ) { picked ->
-            val newMode = TunnelMode.valueOf(picked.id)
-            Prefs.updateDestination(config.copy(tunnelMode = newMode))
-            onDestinationsChanged()
-            if (Prefs.activeDestinationId == config.id) {
-                (activity as? SettingsScreenFragment.Host)?.onTunnelModeChanged(newMode)
-            }
-        }
-    }
-
-    private fun editVp8(config: CallConfig) {
-        Vp8ActionSheet.show(
-            parentFragmentManager,
-            config.vp8Fps ?: Prefs.vp8Fps,
-            config.vp8Batch ?: Prefs.vp8Batch,
-            config.dualTrack ?: Prefs.dualTrack,
-            config.reliable ?: Prefs.reliable,
-        ) { fps, batch, dual, reliable ->
-            Prefs.updateDestination(config.copy(vp8Fps = fps, vp8Batch = batch, dualTrack = dual, reliable = reliable))
-            onDestinationsChanged()
-        }
-    }
-
-    private fun promptRename(config: CallConfig) {
+    private fun promptRenameServer(server: XrayServer) {
         InputActionSheet.show(
             manager = parentFragmentManager,
-            title = getString(R.string.destination_rename_title),
+            title = getString(R.string.xray_server_rename_title),
             fieldLabel = getString(R.string.sheet_field_name),
-            initialValue = config.name,
+            initialValue = server.remark,
         ) { newName ->
-            if (newName != config.name) {
-                Prefs.renameDestination(config.id, newName)
-                onDestinationsChanged()
+            if (newName != server.remark) {
+                Prefs.renameXrayServer(server.id, newName)
+                onXrayServersChanged()
             }
         }
     }
 
-    private fun confirmDelete(config: CallConfig) {
+    private fun confirmDeleteServer(server: XrayServer) {
         ConfirmActionSheet.show(
             manager = parentFragmentManager,
-            title = getString(R.string.destination_delete_title),
-            subtitle = getString(R.string.destination_delete_confirm, config.name),
+            title = getString(R.string.xray_server_delete_title),
+            subtitle = getString(R.string.xray_server_delete_confirm, server.remark),
             confirmLabel = getString(R.string.confirm_delete),
             cancelLabel = getString(R.string.sheet_cancel),
             destructive = true,
         ) {
-            Prefs.removeDestination(config.id)
-            onDestinationsChanged()
+            Prefs.removeXrayServer(server.id)
+            onXrayServersChanged()
         }
     }
 
     private fun refreshStats() {
         val view = content ?: return
         val uptimeMs = if (connectedSinceMs > 0L) System.currentTimeMillis() - connectedSinceMs else 0L
-        val active = Prefs.activeDestination
-        val mode = if (active != null) Prefs.activeTunnelMode.forPlatform(active.platform) else Prefs.tunnelMode
-        view.setStats(uptimeText = formatUptime(uptimeMs), mode = mode.label)
+        val modeLabel = when (Prefs.connectionMode) {
+            ConnectionMode.INSTANCE -> {
+                val active = Prefs.activeDestination
+                val mode = if (active != null) Prefs.activeTunnelMode.forPlatform(active.platform) else Prefs.tunnelMode
+                getString(mode.labelRes)
+            }
+            ConnectionMode.XRAY -> getString(R.string.stat_mode_xray)
+        }
+        view.setStats(uptimeText = formatUptime(uptimeMs), mode = modeLabel)
+        sampleThroughput(view)
+    }
+
+    /**
+     * Device-wide RX/TX byte deltas since the last tick. While the tunnel is
+     * up virtually all of it is tunnel traffic, so it's a fair real-time
+     * read-out for the speed cells and the sparkline.
+     */
+    private fun sampleThroughput(view: MainFragmentView) {
+        val rx = android.net.TrafficStats.getTotalRxBytes()
+        val tx = android.net.TrafficStats.getTotalTxBytes()
+        val now = System.currentTimeMillis()
+        val invalid = rx == android.net.TrafficStats.UNSUPPORTED.toLong() ||
+            tx == android.net.TrafficStats.UNSUPPORTED.toLong()
+        if (!invalid && lastSampleMs > 0L && now > lastSampleMs) {
+            val secs = (now - lastSampleMs) / 1000.0
+            val rxRate = ((rx - lastRxBytes).coerceAtLeast(0) / secs).toLong()
+            val txRate = ((tx - lastTxBytes).coerceAtLeast(0) / secs).toLong()
+            view.setThroughput(rxRate, txRate)
+        }
+        lastRxBytes = rx
+        lastTxBytes = tx
+        lastSampleMs = now
     }
 
     private fun formatUptime(ms: Long): String {
@@ -261,6 +388,74 @@ class MainFragment : Fragment(R.layout.fragment_main_screen) {
         val minutes = (totalSeconds / 60L) % 60L
         val seconds = totalSeconds % 60L
         return "%02d:%02d:%02d".format(hours, minutes, seconds)
+    }
+
+    /** Telegram bot for checking / buying a subscription: @your_subscription_bot. */
+    private fun openSubscriptionBot() {
+        val ctx = context ?: return
+        // tg:// first (opens the app directly), web profile as fallback.
+        val tgUri = android.net.Uri.parse("tg://resolve?domain=your_subscription_bot")
+        val webUri = android.net.Uri.parse("https://t.me/your_subscription_bot")
+        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, tgUri)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            ctx.startActivity(intent)
+        } catch (_: android.content.ActivityNotFoundException) {
+            try {
+                ctx.startActivity(
+                    android.content.Intent(android.content.Intent.ACTION_VIEW, webUri)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            } catch (_: android.content.ActivityNotFoundException) {
+            }
+        }
+    }
+
+    /**
+     * Fills the subscription quota card: traffic used (of total, or "used X"
+     * for unlimited) and whole days left before the earliest expiry. Values
+     * come from the `subscription-userinfo` header the panel sends with the
+     * feed, captured by each subscription refresh. Aggregated across all
+     * subscriptions; the card hides while nothing has reported anything.
+     */
+    private fun updateSubscriptionStats() {
+        val view = content ?: return
+        val subs = Prefs.xraySubscriptions
+        val usedTotal = subs.sumOf { it.usedBytes }
+        val quotaTotal = subs.sumOf { it.totalBytes }
+        val expires = subs.map { it.expireAtSec }.filter { it > 0L }
+        val earliestExpire = expires.minOrNull()
+
+        val trafficText = when {
+            usedTotal <= 0L && quotaTotal <= 0L -> null
+            quotaTotal > 0L -> getString(
+                R.string.stat_traffic_of,
+                formatBytes(usedTotal),
+                formatBytes(quotaTotal),
+            )
+            else -> getString(R.string.stat_traffic_unlimited, formatBytes(usedTotal))
+        }
+        val daysText = when {
+            earliestExpire == null -> if (trafficText == null) null else getString(R.string.stat_no_expiry)
+            else -> {
+                val daysLeft = ((earliestExpire * 1000L - System.currentTimeMillis()) / 86_400_000L).toInt()
+                if (daysLeft < 0) getString(R.string.stat_expired) else daysLeft.toString()
+            }
+        }
+        val trafficFraction = if (quotaTotal > 0L) (usedTotal.toFloat() / quotaTotal) else null
+        view.bindSubscriptionStats(trafficText, daysText, trafficFraction)
+    }
+
+    private fun formatBytes(bytes: Long): String {
+        if (bytes < 0) return "?"
+        var value = bytes.toDouble()
+        var unit = 0
+        val units = listOf("B", "KB", "MB", "GB", "TB")
+        while (value >= 1024.0 && unit < units.size - 1) {
+            value /= 1024.0
+            unit++
+        }
+        return if (unit == 0) "${bytes.toInt()} ${units[unit]}" else String.format("%.1f %s", value, units[unit])
     }
 
     private fun host(): Host? = activity as? Host
@@ -277,4 +472,30 @@ class MainFragment : Fragment(R.layout.fragment_main_screen) {
     }
 
     private fun hostStatus(): VpnStatus? = host()?.currentStatus()
+
+    /**
+     * Whitelist Bypass works around carrier-level (LTE) blocking, so on a
+     * Wi-Fi / Ethernet network it usually does nothing useful. Ask for
+     * confirmation first when the active network isn't cellular; [connect] runs
+     * on confirm, or straight away when we're on mobile data or can't tell.
+     */
+    private fun confirmWhitelistThenConnect(connect: () -> Unit) {
+        val cm = context?.getSystemService(android.content.Context.CONNECTIVITY_SERVICE)
+            as? android.net.ConnectivityManager
+        val caps = cm?.getNetworkCapabilities(cm.activeNetwork)
+        val onCellular = caps == null ||
+            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR)
+        if (onCellular) {
+            connect()
+            return
+        }
+        ConfirmActionSheet.show(
+            manager = parentFragmentManager,
+            title = getString(R.string.whitelist_non_lte_title),
+            subtitle = getString(R.string.whitelist_non_lte_body),
+            confirmLabel = getString(R.string.whitelist_non_lte_confirm),
+            cancelLabel = getString(R.string.sheet_cancel),
+            onConfirm = { connect() },
+        )
+    }
 }

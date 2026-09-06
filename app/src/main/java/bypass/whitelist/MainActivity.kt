@@ -6,9 +6,11 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
+import android.view.MotionEvent
 import android.view.View
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.ImageView
@@ -30,6 +32,8 @@ import androidx.viewpager2.adapter.FragmentStateAdapter
 import androidx.viewpager2.widget.ViewPager2
 import bypass.whitelist.tunnel.CallConfig
 import bypass.whitelist.tunnel.CallPlatform
+import bypass.whitelist.tunnel.ConnectTarget
+import bypass.whitelist.tunnel.ConnectionMode
 import bypass.whitelist.tunnel.HeadlessJoinController
 import bypass.whitelist.tunnel.HeadlessSessionService
 import bypass.whitelist.tunnel.PortGuard
@@ -38,7 +42,10 @@ import bypass.whitelist.tunnel.TunnelMode
 import bypass.whitelist.tunnel.TunnelServiceState
 import bypass.whitelist.tunnel.TunnelVpnService
 import bypass.whitelist.tunnel.VpnStatus
+import bypass.whitelist.tunnel.XrayVpnService
+import bypass.whitelist.ui.AddXraySubscriptionSheet
 import bypass.whitelist.ui.CallsListener
+import bypass.whitelist.ui.ConfirmActionSheet
 import bypass.whitelist.ui.HeadlessVkFragment
 import bypass.whitelist.ui.JoinFragmentHost
 import bypass.whitelist.ui.JoinSessionShutdown
@@ -46,15 +53,24 @@ import bypass.whitelist.ui.JsHookJoinFragment
 import bypass.whitelist.ui.LogsFragment
 import bypass.whitelist.ui.MainActivityHost
 import bypass.whitelist.ui.MainFragment
+import bypass.whitelist.ui.OnboardingFragment
 import bypass.whitelist.ui.SettingsScreenFragment
+import bypass.whitelist.ui.UpdateActionSheet
+import bypass.whitelist.ui.XrayServersListener
+import bypass.whitelist.ui.XraySubscriptionsScreenFragment
+import bypass.whitelist.util.AppUpdater
+import bypass.whitelist.util.BatteryOptimizer
 import bypass.whitelist.util.LogWriter
 import bypass.whitelist.util.Net
 import bypass.whitelist.util.Prefs
 import bypass.whitelist.util.SocksAuth
 import bypass.whitelist.util.maskUrl
+import bypass.whitelist.xray.XrayServer
 import cc.cors.connect.api.CorsClient
 import cc.cors.connect.cors.CorsInstanceController
+import cc.cors.connect.cors.LinkAuth
 import cc.cors.connect.cors.TelegramAuth
+import java.io.File
 import java.net.InetSocketAddress
 import java.net.Socket
 import kotlin.concurrent.thread
@@ -64,20 +80,26 @@ class MainActivity :
     JoinFragmentHost,
     MainActivityHost,
     MainFragment.Host,
+    OnboardingFragment.Host,
     SettingsScreenFragment.Host,
     LogsFragment.Host,
-    CallsListener {
+    CallsListener,
+    XrayServersListener,
+    LinkAuth.Listener {
 
     private val logWriter by lazy { LogWriter(cacheDir) }
 
     private lateinit var bottomNav: View
     private lateinit var navMain: LinearLayout
+    private lateinit var navServers: LinearLayout
     private lateinit var navSettings: LinearLayout
     private lateinit var navLogs: LinearLayout
     private lateinit var navMainIcon: ImageView
+    private lateinit var navServersIcon: ImageView
     private lateinit var navSettingsIcon: ImageView
     private lateinit var navLogsIcon: ImageView
     private lateinit var navMainLabel: TextView
+    private lateinit var navServersLabel: TextView
     private lateinit var navSettingsLabel: TextView
     private lateinit var navLogsLabel: TextView
     private lateinit var tabContainer: ViewPager2
@@ -101,13 +123,16 @@ class MainActivity :
     @Volatile private var resetInProgress: Boolean = false
     @Volatile private var overlayVisible: Boolean = false
     @Volatile private var resetGeneration: Long = 0L
-    private var pendingConnectConfig: CallConfig? = null
+    private var pendingConnectTarget: ConnectTarget? = null
+    @Volatile private var pendingVpnStart: (() -> Unit)? = null
     private val navColorEvaluator = ArgbEvaluator()
 
     private val vpnLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode == RESULT_OK) startVpnService()
+        val action = pendingVpnStart
+        pendingVpnStart = null
+        if (result.resultCode == RESULT_OK) (action ?: ::startVpnService)()
         else appendLog("VPN permission denied")
     }
 
@@ -123,36 +148,54 @@ class MainActivity :
         setContentView(R.layout.activity_main)
 
         requestNotificationPermissionIfNeeded()
+        reportLastCrashIfAny()
+        // Hold update / battery nags until the user is past first-run onboarding.
+        // Deferred to a post so the sheet lands after the first frame — showing
+        // it straight from onCreate used to no-op on some devices.
+        if (Prefs.onboardingDone) {
+            window.decorView.post {
+                if (isFinishing || isDestroyed) return@post
+                maybeCheckForUpdates()
+                maybeRemindBatteryOptimization()
+            }
+        }
 
         bottomNav = findViewById(R.id.bottomNav)
         navMain = findViewById(R.id.navMain)
+        navServers = findViewById(R.id.navServers)
         navSettings = findViewById(R.id.navSettings)
         navLogs = findViewById(R.id.navLogs)
         navMainIcon = findViewById(R.id.navMainIcon)
+        navServersIcon = findViewById(R.id.navServersIcon)
         navSettingsIcon = findViewById(R.id.navSettingsIcon)
         navLogsIcon = findViewById(R.id.navLogsIcon)
         navMainLabel = findViewById(R.id.navMainLabel)
+        navServersLabel = findViewById(R.id.navServersLabel)
         navSettingsLabel = findViewById(R.id.navSettingsLabel)
         navLogsLabel = findViewById(R.id.navLogsLabel)
         tabContainer = findViewById(R.id.tabContainer)
         navIndicator = findViewById(R.id.navIndicator)
         subPageContainer = findViewById(R.id.subPageContainer)
+        // System Back pops the FragmentManager stack one entry at a time; the
+        // listener keeps the sub-page layer in sync when it runs empty.
+        supportFragmentManager.addOnBackStackChangedListener { syncSubPageVisibility() }
         joinOverlayContainer = findViewById(R.id.joinOverlayContainer)
         overlayLogs = findViewById(R.id.overlayLogs)
         overlayLogsText = findViewById(R.id.overlayLogsText)
         overlayLogsScroll = findViewById(R.id.overlayLogsScroll)
 
         tabContainer.adapter = object : FragmentStateAdapter(this) {
-            override fun getItemCount(): Int = 3
+            override fun getItemCount(): Int = 4
             override fun createFragment(position: Int): Fragment {
                 return when (position) {
                     TAB_MAIN -> MainFragment()
-                    TAB_SETTINGS -> SettingsScreenFragment()
-                    else -> LogsFragment()
+                    TAB_SERVERS -> XraySubscriptionsScreenFragment.newRoot()
+                    TAB_LOGS -> LogsFragment()
+                    else -> SettingsScreenFragment()
                 }
             }
         }
-        tabContainer.offscreenPageLimit = 3
+        tabContainer.offscreenPageLimit = 4
 
         navPageChangeCallback = object : ViewPager2.OnPageChangeCallback() {
             override fun onPageScrolled(position: Int, positionOffset: Float, positionOffsetPixels: Int) {
@@ -161,10 +204,17 @@ class MainActivity :
             }
 
             override fun onPageSelected(position: Int) {
+                // If a page change slips through while a sub-page is open
+                // (e.g. programmatic), close the sub-page so it doesn't
+                // linger on top of the newly selected tab.
+                if (subPageContainer.visibility == View.VISIBLE) {
+                    dismissSubPage()
+                }
                 currentTabId = when (position) {
                     TAB_MAIN -> R.id.navMain
-                    TAB_SETTINGS -> R.id.navSettings
+                    TAB_SERVERS -> R.id.navServers
                     TAB_LOGS -> R.id.navLogs
+                    TAB_SETTINGS -> R.id.navSettings
                     else -> return
                 }
                 if (navScrollState == ViewPager2.SCROLL_STATE_IDLE) {
@@ -208,8 +258,9 @@ class MainActivity :
         }
 
         navMain.setOnClickListener { selectNavTab(R.id.navMain) }
-        navSettings.setOnClickListener { selectNavTab(R.id.navSettings) }
+        navServers.setOnClickListener { selectNavTab(R.id.navServers) }
         navLogs.setOnClickListener { selectNavTab(R.id.navLogs) }
+        navSettings.setOnClickListener { selectNavTab(R.id.navSettings) }
 
         val restoredTabId =
             savedInstanceState?.getInt(STATE_CURRENT_TAB_ID, R.id.navMain) ?: R.id.navMain
@@ -220,8 +271,11 @@ class MainActivity :
 
         TunnelVpnService.onDisconnect = { runOnUiThread { onDisconnectFromService() } }
         ProxyService.onDisconnect = { runOnUiThread { onDisconnectFromService() } }
+        XrayVpnService.onDisconnect = { runOnUiThread { onDisconnectFromService() } }
 
-        if (CALL_LINK.isNotEmpty() && !TunnelServiceState.isAnyTunnelComponentRunning(this)) {
+        if (!Prefs.onboardingDone && savedInstanceState == null) {
+            showOnboarding()
+        } else if (CALL_LINK.isNotEmpty() && !TunnelServiceState.isAnyTunnelComponentRunning(this)) {
             startJoinFor(CallConfig.newWith(name = CallConfig.suggestNameFor(CALL_LINK), url = CALL_LINK))
         } else if (Prefs.connectOnStart && !TunnelServiceState.isAnyTunnelComponentRunning(this)) {
             Prefs.activeDestination?.let(::startJoinFor)
@@ -234,12 +288,13 @@ class MainActivity :
         super.onResume()
         TunnelVpnService.onDisconnect = { runOnUiThread { onDisconnectFromService() } }
         ProxyService.onDisconnect = { runOnUiThread { onDisconnectFromService() } }
+        XrayVpnService.onDisconnect = { runOnUiThread { onDisconnectFromService() } }
 
         TunnelServiceState.vpnStatusCallback = { status ->
             runOnUiThread {
                 if (resetInProgress) {
                     mainFragment()?.onStatusChanged(VpnStatus.STOPPING)
-                    mainFragment()?.onStatusTextChanged("Stopping previous session...")
+                    mainFragment()?.onStatusTextChanged(getString(R.string.status_stopping_previous))
                     return@runOnUiThread
                 }
                 lastStatus = status
@@ -268,7 +323,7 @@ class MainActivity :
                 lastStatus = VpnStatus.STOPPING
                 mainFragment()?.onConnectedChanged(false)
                 mainFragment()?.onStatusChanged(VpnStatus.STOPPING)
-                mainFragment()?.onStatusTextChanged("Stopping previous session...")
+                mainFragment()?.onStatusTextChanged(getString(R.string.status_stopping_previous))
             }
             TunnelServiceState.isTunnelActive(this) -> {
                 if (!connected || lastStatus != VpnStatus.TUNNEL_ACTIVE) {
@@ -288,8 +343,6 @@ class MainActivity :
                 onDisconnectFromService()
             }
         }
-
-        refreshCorsAuthPrompt()
     }
 
     override fun onPause() {
@@ -303,6 +356,7 @@ class MainActivity :
         navPageChangeCallback = null
         TunnelVpnService.onDisconnect = null
         ProxyService.onDisconnect = null
+        XrayVpnService.onDisconnect = null
         logWriter.close()
         // Stop the Cors instance when the Activity is truly going away (back
         // press / process death), so the backend DELETEs it instead of leaving
@@ -326,15 +380,23 @@ class MainActivity :
         outState.putInt(STATE_CURRENT_TAB_ID, currentTabId)
     }
 
-    override fun onConnectPressed(config: CallConfig) {
+    override fun onConnectPressed(target: ConnectTarget) {
+        when (target) {
+            is ConnectTarget.WhitelistBypass -> startCorsConnect()
+            is ConnectTarget.Instance -> onConnectPressed(target.config)
+            is ConnectTarget.Xray -> startXrayConnect(target.server)
+        }
+    }
+
+    private fun onConnectPressed(config: CallConfig) {
         if (resetInProgress) {
-            pendingConnectConfig = config
+            pendingConnectTarget = ConnectTarget.Instance(config)
             appendLog("Queued connect after previous session stops")
-            mainFragment()?.onStatusTextChanged("Stopping previous session...")
+            mainFragment()?.onStatusTextChanged(getString(R.string.status_stopping_previous))
             return
         }
         if (TunnelServiceState.isAnyTunnelComponentRunning(this) || !PortGuard.isPortAvailable(Prefs.socksPort)) {
-            pendingConnectConfig = config
+            pendingConnectTarget = ConnectTarget.Instance(config)
             appendLog("Waiting for previous local tunnel to stop")
             fullReset()
             return
@@ -343,7 +405,7 @@ class MainActivity :
     }
 
     override fun onDisconnectPressed() {
-        pendingConnectConfig = null
+        pendingConnectTarget = null
         if (resetInProgress) {
             forceUnlockReset("Stopped waiting for previous session")
             return
@@ -351,33 +413,93 @@ class MainActivity :
         fullReset()
     }
 
-    override fun onPingPressed(callback: (Boolean, Int) -> Unit) {
+    override fun onServiceCheckPressed(callback: (List<MainFragment.ServiceStatus>) -> Unit) {
         thread {
-            val started = System.nanoTime()
-            val ok = try {
-                probeViaSocks5(host = "ya.ru", port = 443)
-            } catch (_: Exception) {
-                false
+            // Sequential on purpose: each service is reported as soon as its
+            // probe finishes, so the dialog fills row by row instead of
+            // dumping everything at the end. A bounded parallel pool was
+            // tried before, but simultaneous TLS handshakes through a single
+            // proxy outbound caused timeouts for perfectly reachable hosts.
+            val results = mutableListOf<MainFragment.ServiceStatus>()
+            for ((_, host) in MainFragment.SERVICE_TARGETS) {
+                results.add(checkServiceWithRetry(host))
+                val snapshot = results.toList()
+                runOnUiThread { callback(snapshot) }
             }
-            val rtt = ((System.nanoTime() - started) / 1_000_000).toInt()
-            runOnUiThread { callback(ok, rtt) }
         }
+    }
+
+    /**
+     * One availability row: a real TCP ping to host:443 *through the active
+     * tunnel*, up to three attempts with a short backoff. A single attempt
+     * through a mobile proxy is noisy — slow TLS handshakes, momentary resets
+     * and rate-limiting all fail the first try even when the service is
+     * reachable — so the retries keep those from being reported as
+     * "unavailable". The reported RTT is the time to complete the SOCKS5
+     * CONNECT to the destination, i.e. an actual round-trip over the tunnel.
+     */
+    private fun checkServiceWithRetry(host: String): MainFragment.ServiceStatus {
+        var rttMs: Int? = null
+        repeat(3) { attempt ->
+            if (rttMs == null) {
+                if (attempt > 0) Thread.sleep(300)
+                rttMs = measureServiceRtt(host)
+            }
+        }
+        return MainFragment.ServiceStatus(name = hostDisplayName(host), ok = rttMs != null, rttMs = rttMs ?: 0)
+    }
+
+    /**
+     * Real round-trip to `host:443` through whichever tunnel is up, measured at
+     * the TCP level (SOCKS5 CONNECT), so the result answers exactly "can the
+     * tunnel reach this site, and how fast" without HTTP semantics:
+     *  - Xray mode: through the core's loopback SOCKS inbound (see
+     *    [XrayConfigBuilder]; the app's UID is excluded from the VPN, so plain
+     *    sockets here would bypass the tunnel). If that inbound isn't
+     *    reachable at all, falls back to the core's own through-tunnel probe.
+     *  - Instance/call mode: through the local relay's SOCKS5, which forwards
+     *    the connection over the WebRTC data channel.
+     */
+    private fun measureServiceRtt(host: String): Int? {
+        val viaSocks = try {
+            probeViaSocks5(host = host, port = 443)
+        } catch (_: Exception) {
+            null
+        }
+        if (viaSocks != null) return viaSocks
+
+        val xray = XrayVpnService.instance
+        if (xray?.isRunning == true && !loopbackSocksReachable()) {
+            // Loopback inbound never accepted the connection (e.g. a session
+            // started before it existed) — let the core probe through itself.
+            return xray.measureThroughTunnel("https://$host")?.toInt()
+        }
+        return null
+    }
+
+    private fun hostDisplayName(host: String): String =
+        MainFragment.SERVICE_TARGETS.firstOrNull { it.second == host }?.first ?: host
+
+    /** Whether the core's loopback SOCKS inbound accepts TCP connections. */
+    private fun loopbackSocksReachable(): Boolean = try {
+        java.net.Socket().use { socket ->
+            socket.connect(java.net.InetSocketAddress(Net.LOCALHOST, Prefs.activeLoopbackSocksPort.toInt()), 1000)
+            true
+        }
+    } catch (_: Exception) {
+        false
     }
 
     override fun isTunnelActive(): Boolean = connected
 
     override fun currentStatus(): VpnStatus? = lastStatus
 
-    override fun onCorsConnectPressed() = startCorsConnect()
-
-    override fun onCorsSignInPressed() = signInWithTelegram()
-
     // ---- Cors.Connect instance flow -------------------------------------
 
     fun startCorsConnect() {
         if (resetInProgress) {
             appendLog("Waiting for previous session to stop before Cors.Connect connect")
-            mainFragment()?.onStatusTextChanged("Stopping previous session...")
+            mainFragment()?.onStatusTextChanged(getString(R.string.status_stopping_previous))
             return
         }
         corsController?.stop()
@@ -385,33 +507,21 @@ class MainActivity :
         appendLog("Cors.Connect: requesting instance")
     }
 
-    fun signInWithTelegram() {
-        if (TelegramAuth.startLogin(this)) {
-            appendLog("Cors.Connect: opening Telegram for authorization")
-            mainFragment()?.onCorsAuthRequired(false)
-            mainFragment()?.onStatusTextChanged(getString(R.string.cors_status_auth_required))
-        } else {
-            Toast.makeText(this, R.string.cors_toast_no_telegram, Toast.LENGTH_SHORT).show()
-        }
-    }
-
     /**
-     * Proactively surfaces the "Sign in with Telegram" CTA when the app has no
-     * cached Telegram initData, instead of only revealing it reactively after
-     * a Connect attempt already spun up a doomed anonymous temp instance.
-     *
-     * Without this, a user whose account was flagged eligible server-side (via
-     * the admin panel) but who never completed the in-app Telegram sign-in on
-     * this device/install has no indication anything is needed until they tap
-     * Connect, get a 5-minute temp link, and watch heartbeats fail — because
-     * claiming (which is what would apply their eligibility) never fires
-     * without local initData. Called on every resume so it also re-appears if
-     * the cached initData was cleared after expiring (see
-     * CorsInstanceController.createInstanceResilient).
+     * Implicit sign-in succeeded (an added xray subscription turned out to be
+     * a Remnawave subscription link — see [cc.cors.connect.cors.LinkAuth]).
+     * There is no manual sign-in UI anymore: adding a subscription IS the
+     * sign-in.
      */
-    private fun refreshCorsAuthPrompt() {
-        if (!corsClient.isConfigured) return
-        mainFragment()?.onCorsAuthRequired(!TelegramAuth.hasInitData)
+    override fun onCorsSignedIn(username: String) {
+        appendLog("Cors.Connect: signed in as $username")
+        // Sign-in fills Prefs.corsUsername, which hides the always-on
+        // "add a subscription" CTA on the connected Main screen.
+        mainFragment()?.onXrayServersChanged()
+        settingsFragment()?.refresh()
+        // If a connect flow is mid-claim (anonymous temp instance created and
+        // waiting for credentials), resume it with the fresh session.
+        corsController?.resumeClaim()
     }
 
     fun forgetCorsInstance() {
@@ -428,8 +538,14 @@ class MainActivity :
         }
 
         override fun onCorsOutputReady(config: CallConfig) {
-            // Hand the spawned service link to the existing connect pipeline so
-            // the user authorizes inside it through the WebView/headless relay.
+            // Whitelist Bypass is a single fixed list entry that "handles the
+            // entire connection flow": selecting it and pressing the hero
+            // button already committed the user to connecting, so once the
+            // auto-provisioned instance is ready, join it immediately — no
+            // second confirmation/press needed. startJoinFor() sets
+            // Prefs.connectionMode = INSTANCE itself, so the mode display
+            // can't get stuck on "Xray" even if this races with something
+            // else touching Prefs.connectionMode.
             corsPendingOutput = config
             runOnUiThread {
                 if (!isFinishing && !isDestroyed) startJoinFor(config)
@@ -437,19 +553,17 @@ class MainActivity :
         }
 
         override fun onCorsNeedsTelegram() {
-            // Do NOT auto-open Telegram. The user must explicitly tap the
-            // "Sign in with Telegram" button (Main screen CTA or Settings) to
-            // authorize. Surface the required state and reveal the button.
+            // No credential available and none could be derived implicitly.
+            // Surface the state — the fix is adding the subscription link,
+            // the same one used for the xray servers.
             runOnUiThread {
                 mainFragment()?.onStatusTextChanged(getString(R.string.cors_status_auth_required))
-                mainFragment()?.onCorsAuthRequired(true)
             }
         }
 
         override fun onCorsClaimed(username: String) {
             appendLog("Cors.Connect: authorized as $username")
             runOnUiThread {
-                mainFragment()?.onCorsAuthRequired(false)
                 mainFragment()?.onStatusTextChanged(getString(R.string.cors_status_claimed, username))
                 settingsFragment()?.refresh()
             }
@@ -458,7 +572,6 @@ class MainActivity :
         override fun onCorsFailed(message: String) {
             appendLog("Cors.Connect: $message")
             runOnUiThread {
-                mainFragment()?.onCorsAuthRequired(false)
                 Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
             }
         }
@@ -473,6 +586,25 @@ class MainActivity :
         mainFragment()?.onDestinationsChanged()
     }
 
+    override fun onXrayServersChanged() {
+        // Broadcast to every live listener, not just the Main tab: the Servers
+        // tab (a sibling pager page) and any pushed sub-page also need to
+        // rebuild their lists right after a subscription import — otherwise
+        // the new servers only showed up after an app restart.
+        notifyXrayServersListeners()
+    }
+
+    private fun notifyXrayServersListeners() {
+        val seen = HashSet<XrayServersListener>()
+        fun visit(fm: androidx.fragment.app.FragmentManager) {
+            for (f in fm.fragments) {
+                (f as? XrayServersListener)?.let { if (seen.add(it)) it.onXrayServersChanged() }
+                visit(f.childFragmentManager)
+            }
+        }
+        visit(supportFragmentManager)
+    }
+
     override fun onTunnelModeChanged(mode: TunnelMode) {
         fullReset()
     }
@@ -485,14 +617,19 @@ class MainActivity :
             .show()
     }
 
+    override fun onForgetAllXrayServers() {
+        Prefs.forgetAllXrayServers()
+        mainFragment()?.onXrayServersChanged()
+        Toast.makeText(this, R.string.settings_toast_xray_servers_cleared, Toast.LENGTH_SHORT)
+            .show()
+    }
+
     override fun onResetAllSettings() {
         Prefs.resetAllSettings()
         App.applyTheme(Prefs.themeMode)
         settingsFragment()?.refresh()
         Toast.makeText(this, R.string.settings_toast_reset_done, Toast.LENGTH_SHORT).show()
     }
-
-    override fun onCorsSignInWithTelegram() = signInWithTelegram()
 
     override fun onCorsForgetInstance() = forgetCorsInstance()
 
@@ -572,22 +709,58 @@ class MainActivity :
 
     override fun pushSubPage(fragment: Fragment) {
         subPageContainer.visibility = View.VISIBLE
+        tabContainer.isUserInputEnabled = false
         supportFragmentManager.beginTransaction()
             .replace(R.id.subPageContainer, fragment, SUB_PAGE_TAG)
             .addToBackStack(SUB_PAGE_TAG)
             .commit()
     }
 
+    override fun openServersTab() {
+        selectNavTab(R.id.navServers)
+    }
+
+    private fun showOnboarding() {
+        joinOverlayContainer.visibility = View.VISIBLE
+        bottomNav.visibility = View.GONE
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.joinOverlayContainer, OnboardingFragment())
+            .commit()
+    }
+
+    override fun onOnboardingFinished() {
+        val fragment = supportFragmentManager.findFragmentById(R.id.joinOverlayContainer)
+        if (fragment is OnboardingFragment) {
+            supportFragmentManager.beginTransaction().remove(fragment).commitAllowingStateLoss()
+        }
+        joinOverlayContainer.visibility = View.GONE
+        bottomNav.visibility = View.VISIBLE
+        // First run just finished onboarding, so the onCreate nags were skipped —
+        // fire the battery-optimization reminder now.
+        window.decorView.post {
+            if (isFinishing || isDestroyed) return@post
+            maybeRemindBatteryOptimization()
+        }
+    }
+
     override fun popSubPage() {
-        supportFragmentManager.popBackStackImmediate(
-            SUB_PAGE_TAG,
-            FragmentManager.POP_BACK_STACK_INCLUSIVE
-        )
-        subPageContainer.visibility = View.GONE
+        // Sub-pages are stacked (Advanced → Xray servers → …), so back must
+        // pop exactly one level; popping the whole SUB_PAGE_TAG stack used to
+        // dump the user on the main screen instead of the parent page.
+        supportFragmentManager.popBackStackImmediate()
+        syncSubPageVisibility()
+    }
+
+    /** Hides the sub-page layer once its back stack is empty (also fires on system Back). */
+    private fun syncSubPageVisibility() {
+        if (supportFragmentManager.backStackEntryCount == 0) {
+            subPageContainer.visibility = View.GONE
+            tabContainer.isUserInputEnabled = true
+        }
     }
 
     override fun onJoinCancel() {
-        pendingConnectConfig = null
+        pendingConnectTarget = null
         runOnUiThread { fullReset() }
     }
 
@@ -604,10 +777,66 @@ class MainActivity :
         }
         if (TunnelServiceState.hasForeignVpn(this)) {
             appendLog("Another VPN is active, requesting system VPN switch")
-            mainFragment()?.onStatusTextChanged("Requesting VPN replacement...")
+            mainFragment()?.onStatusTextChanged(getString(R.string.status_requesting_replacement))
         }
+        pendingVpnStart = ::startVpnService
         val intent = VpnService.prepare(this)
         if (intent != null) vpnLauncher.launch(intent) else startVpnService()
+    }
+
+    // ---- Standard Xray connection flow -----------------------------------
+
+    private fun startXrayConnect(server: XrayServer) {
+        if (resetInProgress) {
+            pendingConnectTarget = ConnectTarget.Xray(server)
+            appendLog("Queued connect after previous session stops")
+            mainFragment()?.onStatusTextChanged(getString(R.string.status_stopping_previous))
+            return
+        }
+        if (TunnelServiceState.isAnyTunnelComponentRunning(this) || !PortGuard.isPortAvailable(Prefs.xraySocksPort)) {
+            pendingConnectTarget = ConnectTarget.Xray(server)
+            appendLog("Waiting for previous local tunnel to stop")
+            fullReset()
+            return
+        }
+        if (connected) {
+            fullReset()
+        }
+
+        // See the matching comment in startJoinFor: keeps the Main screen's
+        // "Mode" stat correct for every Xray-connect entry point, not just
+        // list selection.
+        Prefs.connectionMode = ConnectionMode.XRAY
+
+        logWriter.reset()
+        runOnUiThread { logsFragment()?.refresh() }
+        appendLog("Connecting via Xray: ${server.summary}")
+        lastStatus = VpnStatus.CONNECTING
+        mainFragment()?.onStatusChanged(VpnStatus.CONNECTING)
+        mainFragment()?.onConnectedChanged(false)
+        setJoinOverlayVisible(false)
+
+        if (TunnelServiceState.hasForeignVpn(this)) {
+            appendLog("Another VPN is active, requesting system VPN switch")
+            mainFragment()?.onStatusTextChanged(getString(R.string.status_requesting_replacement))
+        }
+        pendingVpnStart = ::startXrayVpnService
+        val intent = VpnService.prepare(this)
+        if (intent != null) vpnLauncher.launch(intent) else startXrayVpnService()
+    }
+
+    private fun startXrayVpnService() {
+        startService(Intent(this, XrayVpnService::class.java))
+        appendLog("Xray VPN start requested")
+    }
+
+    /** Surfaces the previous run's crash (if any, see [App.lastCrashText]) in the Logs tab so it's visible without adb. */
+    private fun reportLastCrashIfAny() {
+        val text = App.lastCrashText(this) ?: return
+        File(filesDir, "last_crash.txt").delete()
+        appendLog("=== Previous run crashed ===")
+        text.lineSequence().forEach { appendLog(it) }
+        appendLog("=== End of crash report ===")
     }
 
     private fun requestNotificationPermissionIfNeeded() {
@@ -620,9 +849,57 @@ class MainActivity :
         notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
+    /**
+     * Automatic update check: at most once a day, silently. When a newer
+     * GitHub release exists the update sheet opens so the user can download.
+     */
+    private fun maybeCheckForUpdates() {
+        val now = System.currentTimeMillis()
+        if (now - Prefs.lastUpdateCheck < UPDATE_CHECK_INTERVAL_MS) return
+        Prefs.lastUpdateCheck = now
+        AppUpdater.checkLatest { release ->
+            if (release != null && AppUpdater.isNewer(release.version)) {
+                val settings = settingsFragment() ?: return@checkLatest
+                if (settings.isAdded) UpdateActionSheet.show(supportFragmentManager)
+            }
+        }
+    }
+
+    /**
+     * One-time battery-optimization reminder: a background VPN gets frozen by
+     * Doze unless exempted, so nudge the user once (they can also toggle it
+     * later from Settings → App).
+     */
+    private fun maybeRemindBatteryOptimization() {
+        if (!BatteryOptimizer.shouldShowReminder(this)) return
+        BatteryOptimizer.promptedThisProcess = true
+        Prefs.batteryReminderShown = true
+        ConfirmActionSheet.show(
+            manager = supportFragmentManager,
+            title = getString(R.string.battery_reminder_title),
+            subtitle = getString(R.string.battery_reminder_sub),
+            confirmLabel = getString(R.string.battery_reminder_allow),
+            cancelLabel = getString(R.string.battery_reminder_later),
+        ) { BatteryOptimizer.requestIgnore(this) }
+    }
+
     private fun handleIntent(intent: Intent?) {
-        // Telegram initData App Link callback: https://<host>/tginit?initdata=...
         val data = intent?.data
+        // Subscription import deep link: corsconnect://add/<url-encoded-subscription-link>
+        if (intent != null && intent.action == Intent.ACTION_VIEW && data != null &&
+            data.scheme.equals("corsconnect", ignoreCase = true) && data.host.equals("add", ignoreCase = true)
+        ) {
+            intent.action = null
+            val encoded = data.schemeSpecificPart.removePrefix("//add/").removePrefix("//add")
+            val subscriptionLink = Uri.decode(encoded).trim()
+            if (subscriptionLink.isEmpty()) {
+                Toast.makeText(this, R.string.xray_sheet_error_unrecognized, Toast.LENGTH_SHORT).show()
+            } else {
+                AddXraySubscriptionSheet.show(supportFragmentManager, subscriptionLink)
+            }
+            return
+        }
+        // Telegram initData App Link callback: https://<host>/tginit?initdata=...
         if (intent != null && intent.action == Intent.ACTION_VIEW && TelegramAuth.isCallback(data) && data != null) {
             intent.action = null
             val initData = TelegramAuth.extractInitData(data)
@@ -647,7 +924,7 @@ class MainActivity :
         intent.action = null
         val isConnecting = lastStatus == VpnStatus.CONNECTING
         if (!connected && !isConnecting && !TunnelServiceState.isAnyTunnelComponentRunning(this)) {
-            Prefs.activeDestination?.let(::onConnectPressed) ?: run {
+            Prefs.activeDestination?.let { onConnectPressed(it) } ?: run {
                 Toast.makeText(this, R.string.error_no_destination, Toast.LENGTH_SHORT).show()
             }
         } else if (connected) {
@@ -659,12 +936,7 @@ class MainActivity :
         if (currentTabId == itemId) return
         currentTabId = itemId
         dismissSubPage()
-        val index = when (itemId) {
-            R.id.navMain -> TAB_MAIN
-            R.id.navSettings -> TAB_SETTINGS
-            R.id.navLogs -> TAB_LOGS
-            else -> TAB_MAIN
-        }
+        val index = navIndexFor(itemId)
         updateNavSelection(itemId)
         val animateIndicator = tabContainer.currentItem != index
         if (!animatePager || tabContainer.currentItem == index) {
@@ -673,20 +945,26 @@ class MainActivity :
         tabContainer.setCurrentItem(index, animatePager)
     }
 
+    private fun navIndexFor(itemId: Int): Int = when (itemId) {
+        R.id.navMain -> TAB_MAIN
+        R.id.navServers -> TAB_SERVERS
+        R.id.navLogs -> TAB_LOGS
+        R.id.navSettings -> TAB_SETTINGS
+        else -> TAB_MAIN
+    }
+
+    private fun navItems(): List<LinearLayout> = listOf(navMain, navServers, navLogs, navSettings)
+
     private fun updateNavSelection(itemId: Int) {
-        applyNavSelectionState(0f, when (itemId) {
-            R.id.navMain -> TAB_MAIN
-            R.id.navSettings -> TAB_SETTINGS
-            R.id.navLogs -> TAB_LOGS
-            else -> TAB_MAIN
-        })
+        applyNavSelectionState(0f, navIndexFor(itemId))
     }
 
     private fun moveNavIndicatorTo(itemId: Int, animate: Boolean) {
         val target = when (itemId) {
             R.id.navMain -> navMain
-            R.id.navSettings -> navSettings
+            R.id.navServers -> navServers
             R.id.navLogs -> navLogs
+            R.id.navSettings -> navSettings
             else -> null
         } ?: return
 
@@ -709,7 +987,7 @@ class MainActivity :
     }
 
     private fun moveNavIndicatorForPager(position: Int, positionOffset: Float) {
-        val targets = listOf(navMain, navSettings, navLogs)
+        val targets = navItems()
         val current = targets.getOrNull(position) ?: return
         val next = targets.getOrNull(position + 1)
         val targetLeft = if (next != null) {
@@ -736,7 +1014,7 @@ class MainActivity :
     }
 
     private fun applyNavSelectionState(positionOffset: Float, position: Int) {
-        val emphasis = floatArrayOf(0f, 0f, 0f)
+        val emphasis = floatArrayOf(0f, 0f, 0f, 0f)
         val baseIndex = position.coerceIn(0, emphasis.lastIndex)
         emphasis[baseIndex] = 1f - positionOffset
         val nextIndex = (baseIndex + 1).coerceAtMost(emphasis.lastIndex)
@@ -745,8 +1023,9 @@ class MainActivity :
         }
 
         applyNavVisual(navMainIcon, navMainLabel, emphasis[0])
-        applyNavVisual(navSettingsIcon, navSettingsLabel, emphasis[1])
+        applyNavVisual(navServersIcon, navServersLabel, emphasis[1])
         applyNavVisual(navLogsIcon, navLogsLabel, emphasis[2])
+        applyNavVisual(navSettingsIcon, navSettingsLabel, emphasis[3])
     }
 
     private fun applyNavVisual(icon: ImageView, label: TextView, emphasis: Float) {
@@ -771,16 +1050,36 @@ class MainActivity :
     private fun logsFragment(): LogsFragment? =
         supportFragmentManager.fragments.firstOrNull { it is LogsFragment } as? LogsFragment
 
-    private fun probeViaSocks5(host: String, port: Int): Boolean {
+    /**
+     * Opens a SOCKS5 CONNECT to `host:port` through the active loopback proxy
+     * and returns the round-trip time (ms) it took the proxy to report the
+     * remote connection established — a real ping over the tunnel. Returns
+     * null on any handshake failure, refusal or premature EOF.
+     */
+    private fun probeViaSocks5(host: String, port: Int): Int? {
+        val started = System.nanoTime()
         Socket().use { socket ->
-            socket.connect(InetSocketAddress(Net.LOCALHOST, Prefs.socksPort.toInt()), 5000)
+            socket.connect(InetSocketAddress(Net.LOCALHOST, Prefs.activeLoopbackSocksPort.toInt()), 5000)
             socket.soTimeout = 15000
             val output = socket.getOutputStream()
             val input = socket.getInputStream()
 
+            fun readOrFail(n: Int): ByteArray? {
+                val buf = ByteArray(n)
+                var read = 0
+                while (read < n) {
+                    val r = input.read(buf, read, n - read)
+                    if (r < 0) return null
+                    read += r
+                }
+                return buf
+            }
+
+            // Greeting: version 5, one method — username/password (0x02).
             output.write(byteArrayOf(0x05, 0x01, 0x02))
             output.flush()
-            if (input.read() != 0x05 || input.read() != 0x02) return false
+            val greeting = readOrFail(2) ?: return null
+            if (greeting[0].toInt() != 0x05 || greeting[1].toInt() != 0x02) return null
 
             val userBytes = SocksAuth.user.toByteArray(Charsets.US_ASCII)
             val passBytes = SocksAuth.pass.toByteArray(Charsets.US_ASCII)
@@ -792,7 +1091,8 @@ class MainActivity :
             System.arraycopy(passBytes, 0, authPacket, 3 + userBytes.size, passBytes.size)
             output.write(authPacket)
             output.flush()
-            if (input.read() != 0x01 || input.read() != 0x00) return false
+            val authReply = readOrFail(2) ?: return null
+            if (authReply[1].toInt() != 0x00) return null
 
             val hostBytes = host.toByteArray(Charsets.US_ASCII)
             val request = ByteArray(4 + 1 + hostBytes.size + 2)
@@ -807,18 +1107,30 @@ class MainActivity :
             output.write(request)
             output.flush()
 
-            return input.read() == 0x05 && input.read() == 0x00
+            // Reply header: VER REP RSV ATYP, then a bound address we don't need.
+            val reply = readOrFail(4) ?: return null
+            if (reply[0].toInt() != 0x05 || reply[1].toInt() != 0x00) return null
+            val addrLen = when (reply[3].toInt()) {
+                0x01 -> 4
+                0x04 -> 16
+                0x03 -> (readOrFail(1) ?: return null)[0].toInt() and 0xff
+                else -> return null
+            }
+            readOrFail(addrLen + 2) ?: return null
+
+            return ((System.nanoTime() - started) / 1_000_000).toInt()
         }
     }
 
     private fun dismissSubPage() {
         if (supportFragmentManager.backStackEntryCount > 0) {
-            supportFragmentManager.popBackStack(
+            supportFragmentManager.popBackStackImmediate(
                 SUB_PAGE_TAG,
                 FragmentManager.POP_BACK_STACK_INCLUSIVE
             )
         }
         subPageContainer.visibility = View.GONE
+        tabContainer.isUserInputEnabled = true
     }
 
     private fun setJoinOverlayVisible(visible: Boolean) {
@@ -834,19 +1146,27 @@ class MainActivity :
 
     private fun startJoinFor(config: CallConfig) {
         if (resetInProgress) {
-            pendingConnectConfig = config
+            pendingConnectTarget = ConnectTarget.Instance(config)
             appendLog("Queued connect after previous session stops")
-            mainFragment()?.onStatusTextChanged("Stopping previous session...")
+            mainFragment()?.onStatusTextChanged(getString(R.string.status_stopping_previous))
             return
         }
         if (TunnelServiceState.isAnyTunnelComponentRunning(this) || !PortGuard.isPortAvailable(Prefs.socksPort)) {
-            pendingConnectConfig = config
+            pendingConnectTarget = ConnectTarget.Instance(config)
             appendLog("Waiting for previous local tunnel to stop")
             fullReset()
             return
         }
         val url = config.url.trim()
         if (url.isEmpty()) return
+
+        // Belt-and-suspenders: every instance connection funnels through here
+        // (list selection + hero press, the Cors.Connect auto-provision flow,
+        // queued reconnects after a reset, the auto-start intent), so fixing
+        // the mode here guarantees the Main screen's "Mode" stat can never be
+        // left showing "Xray" from a previously selected Xray server — even
+        // if some future caller forgets to set it before calling this.
+        Prefs.connectionMode = ConnectionMode.INSTANCE
 
         val platform = config.platform
         if (Prefs.activeTunnelMode == TunnelMode.DC &&
@@ -932,36 +1252,76 @@ class MainActivity :
         removeJoinFragment()
         TunnelVpnService.requestStop(this)
         ProxyService.requestStop(this)
+        XrayVpnService.requestStop(this)
         HeadlessSessionService.requestStop(this)
         setJoinOverlayVisible(false)
         mainFragment()?.onConnectedChanged(false)
         mainFragment()?.onStatusChanged(VpnStatus.STOPPING)
-        mainFragment()?.onStatusTextChanged("Stopping previous session...")
+        mainFragment()?.onStatusTextChanged(getString(R.string.status_stopping_previous))
         thread(name = "full-reset-shutdown") {
             controller?.close()
             var attempts = 0
+            // 90 x 100ms = 9s: covers the 8s hard stop cap in Tunnel/Xray
+            // services, so a hung native engine shutdown resolves via its
+            // staleness timeout *within* this poll instead of failing into
+            // the "still shutting down, try again" dead end.
             while (
-                attempts < 40 &&
+                attempts < 90 &&
                 (TunnelServiceState.isAnyTunnelComponentRunning(this@MainActivity) ||
-                    !PortGuard.isPortAvailable(Prefs.socksPort))
+                    !PortGuard.isPortAvailable(Prefs.socksPort) ||
+                    !PortGuard.isPortAvailable(Prefs.xraySocksPort))
             ) {
                 if (!isResetCurrent(resetId)) return@thread
                 Thread.sleep(100)
                 attempts++
             }
             if (!isResetCurrent(resetId)) return@thread
-            if (TunnelServiceState.isAnyTunnelComponentRunning(this@MainActivity) || !PortGuard.isPortAvailable(Prefs.socksPort)) {
-                TunnelVpnService.requestStop(this@MainActivity)
-                ProxyService.requestStop(this@MainActivity)
-                HeadlessSessionService.requestStop(this@MainActivity)
-                PortGuard.ensurePortFree(Prefs.socksPort)
-                Thread.sleep(150)
-            }
-            if (!isResetCurrent(resetId)) return@thread
-            if (TunnelServiceState.isAnyTunnelComponentRunning(this@MainActivity) || !PortGuard.isPortAvailable(Prefs.socksPort)) {
+            if (TunnelServiceState.isAnyTunnelComponentRunning(this@MainActivity) || !PortGuard.isPortAvailable(Prefs.socksPort) || !PortGuard.isPortAvailable(Prefs.xraySocksPort)) {
+                // Force phase: repeat the stop requests and kill whatever
+                // process still holds the local SOCKS ports (the relay
+                // subprocess is the usual suspect — a graceful stop can hang
+                // on a stuck WebRTC data channel). Several rounds, because a
+                // kill needs a moment to actually release the socket.
                 runOnUiThread {
                     if (isResetCurrent(resetId)) {
-                        forceUnlockReset("Previous session is still shutting down. Try connect again.")
+                        mainFragment()?.onStatusTextChanged(getString(R.string.status_force_stopping))
+                        appendLog("Force-stopping previous session…")
+                    }
+                }
+                var stuckAfterForce = true
+                for (round in 1..3) {
+                    TunnelVpnService.requestStop(this@MainActivity)
+                    ProxyService.requestStop(this@MainActivity)
+                    XrayVpnService.requestStop(this@MainActivity)
+                    HeadlessSessionService.requestStop(this@MainActivity)
+                    PortGuard.ensurePortFree(Prefs.socksPort)
+                    PortGuard.ensurePortFree(Prefs.xraySocksPort)
+                    Thread.sleep(300)
+                    if (!isResetCurrent(resetId)) return@thread
+                    // Ports free = the local tunnel (relay/bridge) is really
+                    // dead; remaining "running" service flags clear on their
+                    // own stop intents and don't block a fresh connect.
+                    if (PortGuard.isPortAvailable(Prefs.socksPort) &&
+                        PortGuard.isPortAvailable(Prefs.xraySocksPort)
+                    ) {
+                        stuckAfterForce = false
+                        break
+                    }
+                }
+                if (stuckAfterForce) {
+                    runOnUiThread {
+                        if (isResetCurrent(resetId)) {
+                            forceUnlockReset(getString(R.string.status_still_shutting_down))
+                        }
+                    }
+                    return@thread
+                }
+            }
+            if (!isResetCurrent(resetId)) return@thread
+            if (TunnelServiceState.isAnyTunnelComponentRunning(this@MainActivity) || !PortGuard.isPortAvailable(Prefs.socksPort) || !PortGuard.isPortAvailable(Prefs.xraySocksPort)) {
+                runOnUiThread {
+                    if (isResetCurrent(resetId)) {
+                        forceUnlockReset(getString(R.string.status_still_shutting_down))
                     }
                 }
                 return@thread
@@ -978,7 +1338,7 @@ class MainActivity :
     private fun maybeFinishReset(expectedResetId: Long? = null) {
         if (!resetInProgress) return
         if (expectedResetId != null && expectedResetId != resetGeneration) return
-        if (TunnelServiceState.isAnyTunnelComponentRunning(this) || !PortGuard.isPortAvailable(Prefs.socksPort)) return
+        if (TunnelServiceState.isAnyTunnelComponentRunning(this) || !PortGuard.isPortAvailable(Prefs.socksPort) || !PortGuard.isPortAvailable(Prefs.xraySocksPort)) return
         resetInProgress = false
         connected = false
         lastStatus = null
@@ -987,30 +1347,46 @@ class MainActivity :
         setJoinOverlayVisible(false)
         mainFragment()?.onConnectedChanged(false)
         mainFragment()?.onStatusChanged(VpnStatus.CALL_DISCONNECTED)
-        val pendingConfig = pendingConnectConfig
-        pendingConnectConfig = null
-        if (pendingConfig != null) {
+        val pendingTarget = pendingConnectTarget
+        pendingConnectTarget = null
+        if (pendingTarget != null) {
             appendLog("Previous session stopped, starting new connection")
-            startJoinFor(pendingConfig)
+            when (pendingTarget) {
+                is ConnectTarget.WhitelistBypass -> startCorsConnect()
+                is ConnectTarget.Instance -> startJoinFor(pendingTarget.config)
+                is ConnectTarget.Xray -> startXrayConnect(pendingTarget.server)
+            }
         }
     }
 
     private fun forceUnlockReset(message: String) {
         resetInProgress = false
-        pendingConnectConfig = null
+        pendingConnectTarget = null
         connected = false
         activeJoinUrl = ""
-        lastStatus = if (PortGuard.isPortAvailable(Prefs.socksPort)) VpnStatus.CALL_DISCONNECTED else VpnStatus.PORT_BUSY
+        lastStatus = if (PortGuard.isPortAvailable(Prefs.socksPort) && PortGuard.isPortAvailable(Prefs.xraySocksPort)) VpnStatus.CALL_DISCONNECTED else VpnStatus.PORT_BUSY
         closeActiveHeadlessController()
         removeJoinFragment()
         setJoinOverlayVisible(false)
         TunnelVpnService.requestStop(this)
         ProxyService.requestStop(this)
+        XrayVpnService.requestStop(this)
         HeadlessSessionService.requestStop(this)
         mainFragment()?.onConnectedChanged(false)
         mainFragment()?.onStatusChanged(lastStatus ?: VpnStatus.CALL_DISCONNECTED)
         mainFragment()?.onStatusTextChanged(message)
         appendLog(message)
+        // Unlocking must not abandon the cleanup: the stuck relay may release
+        // the port a moment later, and without a sweeper it would stay busy
+        // until the next app restart (the exact bug this fixes).
+        thread(name = "force-unlock-sweep") {
+            TunnelVpnService.requestStop(this)
+            ProxyService.requestStop(this)
+            XrayVpnService.requestStop(this)
+            HeadlessSessionService.requestStop(this)
+            PortGuard.ensurePortFree(Prefs.socksPort)
+            PortGuard.ensurePortFree(Prefs.xraySocksPort)
+        }
     }
 
     private fun closeActiveHeadlessController() {
@@ -1040,13 +1416,24 @@ class MainActivity :
         }
     }
 
+    /** Feeds touch-down points to the animated backdrop's ripple effect. */
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
+            findViewById<bypass.whitelist.ui.GradientBackdropView>(R.id.gradientBackdrop)
+                ?.rippleAt(ev.x, ev.y)
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
     companion object {
         const val ACTION_AUTO_START = "bypass.whitelist.AUTO_START"
         private const val SUB_PAGE_TAG = "sub_page"
         private const val STATE_CURRENT_TAB_ID = "current_tab_id"
         private const val CALL_LINK = ""
         private const val TAB_MAIN = 0
-        private const val TAB_SETTINGS = 1
+        private const val TAB_SERVERS = 1
         private const val TAB_LOGS = 2
+        private const val TAB_SETTINGS = 3
+        private const val UPDATE_CHECK_INTERVAL_MS = 24L * 60L * 60L * 1000L
     }
 }

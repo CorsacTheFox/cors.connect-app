@@ -3,6 +3,8 @@ package bypass.whitelist.tunnel
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import bypass.whitelist.App
+import bypass.whitelist.R
 import bypass.whitelist.ui.JoinFragmentHost
 import bypass.whitelist.util.Prefs
 import org.json.JSONObject
@@ -37,10 +39,10 @@ class HeadlessJoinController(
             }
             VpnStatus.TUNNEL_ACTIVE -> {
                 if (vpnRequested.compareAndSet(false, true)) {
-                    host.onJoinStatusText("Relay ready, starting local VPN")
+                    host.onJoinStatusText(App.instance.getString(R.string.relay_ready_starting_vpn))
                     mainHandler.post { host.requestVpn() }
                 } else {
-                    host.onJoinStatusText("Relay reconnected")
+                    host.onJoinStatusText(App.instance.getString(R.string.relay_reconnected))
                     host.onJoinStatus(VpnStatus.TUNNEL_ACTIVE)
                 }
             }

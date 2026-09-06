@@ -1,54 +1,66 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/main"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:layout_height="match_parent">
 
-    <FrameLayout
+    <!-- One continuous animated backdrop behind everything, including the
+         bottom navigation, so the translucent nav has no seam. -->
+    <bypass.whitelist.ui.GradientBackdropView
+        android:id="@+id/gradientBackdrop"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_height="match_parent" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
         <FrameLayout
-            android:id="@+id/tabContainerWrap"
             android:layout_width="match_parent"
-            android:layout_height="match_parent">
-            <androidx.viewpager2.widget.ViewPager2
-                android:id="@+id/tabContainer"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <FrameLayout
+                android:id="@+id/tabContainerWrap"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent" />
+                android:layout_height="match_parent">
+
+                <androidx.viewpager2.widget.ViewPager2
+                    android:id="@+id/tabContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/subPageContainer"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@color/scrim_panel_strong"
+                android:visibility="gone" />
+
+            <FrameLayout
+                android:id="@+id/joinOverlayContainer"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@color/scrim_panel_strong"
+                android:visibility="gone" />
         </FrameLayout>
 
         <FrameLayout
-            android:id="@+id/subPageContainer"
+            android:id="@+id/bottomWrap"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="@color/surface_bg"
-            android:visibility="gone" />
+            android:layout_height="wrap_content"
+            android:background="@android:color/transparent">
 
-        <FrameLayout
-            android:id="@+id/joinOverlayContainer"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="@color/panel_bg"
-            android:visibility="gone" />
-    </FrameLayout>
+            <include
+                android:id="@+id/bottomNav"
+                layout="@layout/view_bottom_nav" />
 
-    <FrameLayout
-        android:id="@+id/bottomWrap"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@color/panel_bg">
-
-        <include
-            android:id="@+id/bottomNav"
-            layout="@layout/view_bottom_nav" />
-
-        <include
-            android:id="@+id/overlayLogs"
-            layout="@layout/view_overlay_logs"
-            android:visibility="gone" />
-    </FrameLayout>
-</LinearLayout>
+            <include
+                android:id="@+id/overlayLogs"
+                layout="@layout/view_overlay_logs"
+                android:visibility="gone" />
+        </FrameLayout>
+    </LinearLayout>
+</FrameLayout>
