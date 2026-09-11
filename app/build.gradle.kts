@@ -7,7 +7,7 @@ plugins {
 
 val versionMajor = 0
 val versionMinor = 5
-val versionPatch = 12
+val versionPatch = 13
 val versionBuild = System.getenv("BUILD_NUMBER")?.toIntOrNull() ?: 0
 
 // Legacy builds (the "0.3" release) already shipped versionCode 1_000_000
