@@ -8,6 +8,7 @@ import android.view.HapticFeedbackConstants
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import bypass.whitelist.BuildConfig
 import bypass.whitelist.R
 import bypass.whitelist.tunnel.ConnectTarget
 import bypass.whitelist.tunnel.ConnectionMode
@@ -19,12 +20,19 @@ import bypass.whitelist.xray.XrayServer
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.net.URL
 import kotlin.concurrent.thread
 
 class MainFragmentView(private val root: View) {
 
     companion object {
         private const val PING_TIMEOUT_MS = 3_000
+
+        /** How often the visible pings are re-measured (connected view + list). */
+        private const val PING_REFRESH_MS = 10_000L
+
+        /** [pingCache] key for the Whitelist Bypass row / connected route ping. */
+        private const val WHITELIST_PING_KEY = "__whitelist_bypass__"
     }
 
     private val headerSub: TextView = root.findViewById(R.id.headerSub)
@@ -83,6 +91,27 @@ class MainFragmentView(private val root: View) {
     var onAuthHintBotClicked: Callback? = null
     var onAllServersClicked: Callback? = null
 
+    /**
+     * Ping target for the Whitelist Bypass entry — it has no Xray address:port
+     * of its own. We tcping the exact endpoint the app reaches the backend
+     * through (the Yandex Cloud Function proxy in default builds), so the RTT
+     * reflects real Whitelist Bypass availability, not a host we never hit
+     * directly. Derived from [BuildConfig.CORS_BASE_URL].
+     */
+    private val whitelistPingHost: String by lazy {
+        runCatching { URL(BuildConfig.CORS_BASE_URL).host }
+            .getOrNull()?.takeIf { it.isNotBlank() } ?: "functions.yandexcloud.net"
+    }
+    private val whitelistPingPort: Int by lazy {
+        runCatching { URL(BuildConfig.CORS_BASE_URL) }.getOrNull()?.let {
+            when {
+                it.port != -1 -> it.port
+                it.protocol.equals("http", ignoreCase = true) -> 80
+                else -> 443
+            }
+        } ?: 443
+    }
+
     private var collapsedToActive: Boolean = false
     private var currentServers: List<XrayServer> = emptyList()
     private var activeServerId: String = ""
@@ -90,6 +119,9 @@ class MainFragmentView(private val root: View) {
     /** TCP ping cache: server id → RTT ms (-1 = timeout), see [bindPing]. */
     private val pingCache = mutableMapOf<String, Int>()
     private val pingInFlight = mutableSetOf<String>()
+    /** Last row [TextView] and host:port bound per ping key — drives [refreshVisiblePings]. */
+    private val pingViews = mutableMapOf<String, TextView>()
+    private val pingTargets = mutableMapOf<String, Pair<String, Int>>()
     private var pingCheckSpinning: Boolean = false
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -135,9 +167,12 @@ class MainFragmentView(private val root: View) {
     fun bindXrayServers(servers: List<XrayServer>, activeId: String) {
         currentServers = servers
         activeServerId = activeId
-        // Drop cache entries for servers that no longer exist.
-        val liveIds = servers.map { it.id }.toSet()
+        // Drop cache entries for servers that no longer exist (but keep the
+        // fixed Whitelist Bypass ping — it has no XrayServer backing it).
+        val liveIds = servers.map { it.id }.toSet() + WHITELIST_PING_KEY
         pingCache.keys.retainAll(liveIds)
+        pingViews.keys.retainAll(liveIds)
+        pingTargets.keys.retainAll(liveIds)
         renderList()
         updateHeaderSub()
     }
@@ -256,8 +291,9 @@ class MainFragmentView(private val root: View) {
     }
 
     private fun activePingText(): String {
-        if (Prefs.connectionMode != ConnectionMode.XRAY) return "—"
-        val rtt = pingCache[Prefs.xrayActiveServerId] ?: return root.context.getString(R.string.ping_measuring)
+        val key = if (Prefs.connectionMode == ConnectionMode.XRAY) Prefs.xrayActiveServerId
+                  else WHITELIST_PING_KEY
+        val rtt = pingCache[key] ?: return root.context.getString(R.string.ping_measuring)
         return if (rtt >= 0) root.context.getString(R.string.ping_ms, rtt)
         else root.context.getString(R.string.ping_timeout)
     }
@@ -378,19 +414,24 @@ class MainFragmentView(private val root: View) {
     fun detach() {
         pingButton.clearAnimation()
         pingCheckSpinning = false
+        stopPingUpdates()
     }
 
     /**
      * Merged list: the single fixed "Whitelist Bypass" entry (always first —
-     * see [ConnectTarget.WhitelistBypass]) followed by the imported Xray
-     * servers. There's no per-item instance data or "add another instance"
-     * concept anymore — Whitelist Bypass handles its entire connection flow
-     * (auto-provision + join) as one action once selected and the hero
-     * button is pressed (see [bypass.whitelist.MainActivity.onConnectPressed]).
+     * see [ConnectTarget.WhitelistBypass]), followed by any manually added
+     * call links ([ConnectTarget.Instance] — VK / Telemost / WB Stream / DION,
+     * added via the same "add" sheet as Xray servers, see
+     * [AddXraySubscriptionSheet]), followed by the imported Xray servers.
+     * Selecting Whitelist Bypass runs its entire connection flow
+     * (auto-provision + join) as one action once the hero button is pressed
+     * (see [bypass.whitelist.MainActivity.onConnectPressed]); a manual call
+     * link instead joins that exact link directly.
      */
     private fun renderList() {
         callsList.removeAllViews()
         val entries: List<ConnectTarget> = listOf(ConnectTarget.WhitelistBypass) +
+            Prefs.savedDestinations.map { ConnectTarget.Instance(it) } +
             currentServers.map { ConnectTarget.Xray(it) }
         val visibleEntries = if (collapsedToActive) {
             entries.filter { isActiveEntry(it) }
@@ -406,7 +447,7 @@ class MainFragmentView(private val root: View) {
             when (target) {
                 is ConnectTarget.WhitelistBypass -> bindWhitelistBypassRow(row, isActive = isActiveEntry(target))
                 is ConnectTarget.Xray -> bindServerRow(row, target.server, isActive = isActiveEntry(target))
-                is ConnectTarget.Instance -> Unit // never appears in the list — see ConnectTarget.Instance's doc
+                is ConnectTarget.Instance -> bindDestinationRow(row, target.config, isActive = isActiveEntry(target))
             }
             row.setOnClickListener { onEntrySelected?.invoke(target) }
             row.setOnLongClickListener {
@@ -426,9 +467,11 @@ class MainFragmentView(private val root: View) {
      * [renderList] no matter which path triggered it.
      */
     private fun isActiveEntry(target: ConnectTarget): Boolean = when (target) {
-        is ConnectTarget.WhitelistBypass -> Prefs.connectionMode == ConnectionMode.INSTANCE
+        is ConnectTarget.WhitelistBypass ->
+            Prefs.connectionMode == ConnectionMode.INSTANCE && Prefs.activeDestinationId.isBlank()
         is ConnectTarget.Xray -> Prefs.connectionMode == ConnectionMode.XRAY && target.server.id == Prefs.xrayActiveServerId
-        is ConnectTarget.Instance -> false
+        is ConnectTarget.Instance ->
+            Prefs.connectionMode == ConnectionMode.INSTANCE && target.config.id == Prefs.activeDestinationId
     }
 
     private fun bindWhitelistBypassRow(row: View, isActive: Boolean) {
@@ -442,7 +485,27 @@ class MainFragmentView(private val root: View) {
         linkView.text = root.context.getString(R.string.whitelist_bypass_row_sub)
         // The protocol line would just duplicate the row name here.
         protocolView.visibility = View.GONE
-        row.findViewById<View>(R.id.rowPing).visibility = View.GONE
+        // No Xray address of its own — tcping the Cors.Connect backend instead.
+        val pingView = row.findViewById<TextView>(R.id.rowPing)
+        pingView.visibility = View.VISIBLE
+        bindPing(pingView, WHITELIST_PING_KEY, whitelistPingHost, whitelistPingPort)
+
+        applyRowActiveState(row, nameView, linkView, protocolView, statusDot, isActive, context)
+    }
+
+    /** A manually added call link (VK / Telemost / WB Stream / DION) — see [ConnectTarget.Instance]. */
+    private fun bindDestinationRow(row: View, config: bypass.whitelist.tunnel.CallConfig, isActive: Boolean) {
+        val context = row.context
+        val nameView = row.findViewById<TextView>(R.id.rowName)
+        val linkView = row.findViewById<TextView>(R.id.rowLink)
+        val protocolView = row.findViewById<TextView>(R.id.rowProtocol)
+        val statusDot = row.findViewById<View>(R.id.rowStatusDot)
+
+        nameView.text = config.name
+        protocolView.text = config.platformLabel
+        linkView.visibility = View.GONE
+        // No host:port to tcping — this is a call link, not an Xray server.
+        row.findViewById<TextView>(R.id.rowPing).visibility = View.GONE
 
         applyRowActiveState(row, nameView, linkView, protocolView, statusDot, isActive, context)
     }
@@ -471,7 +534,7 @@ class MainFragmentView(private val root: View) {
         // button, which re-measures all rows on demand).
         val pingView = row.findViewById<TextView>(R.id.rowPing)
         pingView.visibility = View.VISIBLE
-        bindPing(pingView, server)
+        bindPing(pingView, server.id, server.address, server.port)
 
         applyRowActiveState(row, nameView, linkView, protocolView, statusDot, isActive, context)
     }
@@ -483,37 +546,51 @@ class MainFragmentView(private val root: View) {
      * cached per server id to avoid re-probing on each render; the text is
      * only updated if the row is still attached to the window.
      */
-    private fun bindPing(linkView: TextView, server: XrayServer) {
-        val cached = pingCache[server.id]
+    private fun bindPing(linkView: TextView, key: String, host: String, port: Int) {
+        pingViews[key] = linkView
+        pingTargets[key] = host to port
+        val cached = pingCache[key]
         if (cached != null) {
-            linkView.text = if (cached >= 0) {
-                root.context.getString(R.string.ping_ms, cached)
-            } else {
-                root.context.getString(R.string.ping_timeout)
-            }
-            colorPing(linkView, cached)
+            applyPingText(linkView, cached)
             return
         }
         linkView.text = root.context.getString(R.string.ping_measuring)
         colorPing(linkView, null)
-        if (!pingInFlight.add(server.id)) return
+        measurePingAsync(key, host, port, linkView)
+    }
+
+    /**
+     * Measures [host]:[port] off the main thread, caches the RTT under [key]
+     * (-1 = timeout) and, back on the main thread, updates [linkView] (if still
+     * on screen) plus the connected-route ping read-out. De-duplicated per
+     * [key] via [pingInFlight].
+     */
+    private fun measurePingAsync(key: String, host: String, port: Int, linkView: TextView?) {
+        if (!pingInFlight.add(key)) return
         updatePingCheckSpin()
         thread {
-            val rtt = measurePing(server)
-            pingCache[server.id] = rtt ?: -1
-            pingInFlight.remove(server.id)
+            val rtt = measurePing(host, port)
+            pingCache[key] = rtt ?: -1
+            pingInFlight.remove(key)
             mainHandler.post {
                 updatePingCheckSpin()
-                if (linkView.isAttachedToWindow && linkView.visibility == View.VISIBLE) {
-                    linkView.text = if (rtt != null) {
-                        root.context.getString(R.string.ping_ms, rtt)
-                    } else {
-                        root.context.getString(R.string.ping_timeout)
-                    }
-                    colorPing(linkView, rtt ?: -1)
+                if (linkView != null && linkView.isAttachedToWindow && linkView.visibility == View.VISIBLE) {
+                    applyPingText(linkView, rtt ?: -1)
                 }
+                refreshRoutePing()
             }
         }
+    }
+
+    private fun applyPingText(view: TextView, rtt: Int) {
+        view.text = if (rtt >= 0) root.context.getString(R.string.ping_ms, rtt)
+                    else root.context.getString(R.string.ping_timeout)
+        colorPing(view, rtt)
+    }
+
+    /** Keeps the connected-view route ping cell in sync with [pingCache]. */
+    private fun refreshRoutePing() {
+        routePing.text = activePingText()
     }
 
     /**
@@ -523,6 +600,41 @@ class MainFragmentView(private val root: View) {
     fun invalidatePings() {
         pingCache.clear()
         renderList()
+        refreshRoutePing()
+    }
+
+    private val pingRefreshRunnable = object : Runnable {
+        override fun run() {
+            refreshVisiblePings()
+            mainHandler.postDelayed(this, PING_REFRESH_MS)
+        }
+    }
+
+    /**
+     * Starts the periodic ([PING_REFRESH_MS]) re-measurement of whatever pings
+     * are on screen — the collapsed connected route and every visible list row.
+     * Called from the fragment's onResume; paired with [stopPingUpdates].
+     */
+    fun startPingUpdates() {
+        mainHandler.removeCallbacks(pingRefreshRunnable)
+        mainHandler.postDelayed(pingRefreshRunnable, PING_REFRESH_MS)
+    }
+
+    fun stopPingUpdates() {
+        mainHandler.removeCallbacks(pingRefreshRunnable)
+    }
+
+    private fun refreshVisiblePings() {
+        // Re-probe each on-screen row in place (no re-inflate → no flicker):
+        // the old RTT stays visible until the new measurement lands.
+        var any = false
+        for ((key, view) in pingViews) {
+            if (!view.isAttachedToWindow || view.visibility != View.VISIBLE) continue
+            val (host, port) = pingTargets[key] ?: continue
+            any = true
+            measurePingAsync(key, host, port, view)
+        }
+        if (!any) refreshRoutePing()
     }
 
     /** Spins the header ping icon while any server ping is being measured. */
@@ -550,10 +662,10 @@ class MainFragmentView(private val root: View) {
     }
 
     /** Plain TCP connect RTT — the classic "tcping" proxy latency estimate. */
-    private fun measurePing(server: XrayServer): Int? = try {
+    private fun measurePing(host: String, port: Int): Int? = try {
         val started = System.nanoTime()
         Socket().use { socket ->
-            socket.connect(InetSocketAddress(server.address, server.port), PING_TIMEOUT_MS)
+            socket.connect(InetSocketAddress(host, port), PING_TIMEOUT_MS)
         }
         ((System.nanoTime() - started) / 1_000_000).toInt()
     } catch (e: IOException) {

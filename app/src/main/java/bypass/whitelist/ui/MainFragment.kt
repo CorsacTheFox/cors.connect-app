@@ -27,6 +27,10 @@ class MainFragment : Fragment(R.layout.fragment_main_screen), XrayServersListene
             // Xray share link -> the "add server" sheet as before.
             scanned.isSupportedXrayShareLink() ->
                 AddXraySubscriptionSheet.show(parentFragmentManager, scanned)
+            // A call link (VK / Telemost / WB Stream / DION) -> same sheet,
+            // which auto-detects the type and saves it as a destination.
+            bypass.whitelist.tunnel.CallPlatform.isCallLink(scanned) ->
+                AddXraySubscriptionSheet.show(parentFragmentManager, scanned)
             // Remnawave subscription link (…/sub/<token> or a custom sub
             // domain): it doubles as an xray subscription feed — the add
             // sheet imports the servers AND triggers the implicit
@@ -108,8 +112,15 @@ class MainFragment : Fragment(R.layout.fragment_main_screen), XrayServersListene
                 host()?.onDisconnectPressed()
             } else {
                 when (Prefs.connectionMode) {
-                    ConnectionMode.INSTANCE -> confirmWhitelistThenConnect {
-                        host()?.onConnectPressed(ConnectTarget.WhitelistBypass)
+                    ConnectionMode.INSTANCE -> {
+                        val destination = Prefs.activeDestination
+                        if (destination != null) {
+                            host()?.onConnectPressed(ConnectTarget.Instance(destination))
+                        } else {
+                            confirmWhitelistThenConnect {
+                                host()?.onConnectPressed(ConnectTarget.WhitelistBypass)
+                            }
+                        }
                     }
                     ConnectionMode.XRAY -> Prefs.activeXrayServer?.let {
                         host()?.onConnectPressed(ConnectTarget.Xray(it))
@@ -149,7 +160,7 @@ class MainFragment : Fragment(R.layout.fragment_main_screen), XrayServersListene
             (activity as? MainActivityHost)?.pushSubPage(SplitTunnelingScreenFragment())
         }
         container.onQuickDnsClicked = { DnsActionSheet.show(parentFragmentManager) { } }
-        // Subscription bot chip — opens @your_subscription_bot in Telegram (or the
+        // Subscription bot chip — opens @corsxray2bot in Telegram (or the
         // web profile as fallback) to check / buy a subscription.
         container.onQuickBotClicked = {
             openSubscriptionBot()
@@ -164,20 +175,25 @@ class MainFragment : Fragment(R.layout.fragment_main_screen), XrayServersListene
         container.onEntrySelected = { target ->
             when (target) {
                 is ConnectTarget.WhitelistBypass -> {
+                    Prefs.activeDestinationId = ""
                     Prefs.connectionMode = ConnectionMode.INSTANCE
                 }
                 is ConnectTarget.Xray -> {
                     Prefs.xrayActiveServerId = target.server.id
                     Prefs.connectionMode = ConnectionMode.XRAY
                 }
-                is ConnectTarget.Instance -> Unit // never selected from the list
+                is ConnectTarget.Instance -> {
+                    Prefs.activeDestinationId = target.config.id
+                    Prefs.connectionMode = ConnectionMode.INSTANCE
+                }
             }
             container.refresh()
         }
         container.onEntryLongPressed = { target ->
             when (target) {
                 is ConnectTarget.Xray -> showServerRowMenu(target.server)
-                is ConnectTarget.WhitelistBypass, is ConnectTarget.Instance -> Unit // no per-row menu
+                is ConnectTarget.Instance -> showDestinationRowMenu(target.config)
+                is ConnectTarget.WhitelistBypass -> Unit // no per-row menu
             }
         }
 
@@ -193,6 +209,9 @@ class MainFragment : Fragment(R.layout.fragment_main_screen), XrayServersListene
         content?.bindHero(connected = isHostConnected(), status = hostStatus())
         updateSubscriptionStats()
         content?.resumeAnimations()
+        // Auto-refresh the on-screen pings every 10s, both in the list and the
+        // connected route view.
+        content?.startPingUpdates()
         if (isHostConnected()) {
             tickHandler.removeCallbacks(tickRunnable)
             tickHandler.postDelayed(tickRunnable, 1000L)
@@ -202,6 +221,7 @@ class MainFragment : Fragment(R.layout.fragment_main_screen), XrayServersListene
     override fun onPause() {
         super.onPause()
         content?.pauseAnimations()
+        content?.stopPingUpdates()
         tickHandler.removeCallbacks(tickRunnable)
     }
 
@@ -316,6 +336,57 @@ class MainFragment : Fragment(R.layout.fragment_main_screen), XrayServersListene
         }
     }
 
+    private fun showDestinationRowMenu(config: bypass.whitelist.tunnel.CallConfig) {
+        MenuActionSheet.show(
+            manager = parentFragmentManager,
+            title = config.name,
+            subtitle = config.url,
+            items = listOf(
+                MenuActionSheet.MenuItem("active", getString(R.string.xray_server_menu_set_active), R.drawable.ic_check),
+                MenuActionSheet.MenuItem("rename", getString(R.string.xray_server_menu_rename), R.drawable.ic_action_pencil),
+                MenuActionSheet.MenuItem("delete", getString(R.string.xray_server_menu_delete), R.drawable.ic_setting_trash, danger = true),
+            ),
+        ) { item ->
+            when (item.id) {
+                "active" -> {
+                    Prefs.activeDestinationId = config.id
+                    Prefs.connectionMode = ConnectionMode.INSTANCE
+                    onDestinationsChanged()
+                }
+                "rename" -> promptRenameDestination(config)
+                "delete" -> confirmDeleteDestination(config)
+            }
+        }
+    }
+
+    private fun promptRenameDestination(config: bypass.whitelist.tunnel.CallConfig) {
+        InputActionSheet.show(
+            manager = parentFragmentManager,
+            title = getString(R.string.xray_server_rename_title),
+            fieldLabel = getString(R.string.sheet_field_name),
+            initialValue = config.name,
+        ) { newName ->
+            if (newName != config.name) {
+                Prefs.renameDestination(config.id, newName)
+                onDestinationsChanged()
+            }
+        }
+    }
+
+    private fun confirmDeleteDestination(config: bypass.whitelist.tunnel.CallConfig) {
+        ConfirmActionSheet.show(
+            manager = parentFragmentManager,
+            title = getString(R.string.xray_server_delete_title),
+            subtitle = getString(R.string.xray_server_delete_confirm, config.name),
+            confirmLabel = getString(R.string.confirm_delete),
+            cancelLabel = getString(R.string.sheet_cancel),
+            destructive = true,
+        ) {
+            Prefs.removeDestination(config.id)
+            onDestinationsChanged()
+        }
+    }
+
     private fun promptRenameServer(server: XrayServer) {
         InputActionSheet.show(
             manager = parentFragmentManager,
@@ -390,12 +461,12 @@ class MainFragment : Fragment(R.layout.fragment_main_screen), XrayServersListene
         return "%02d:%02d:%02d".format(hours, minutes, seconds)
     }
 
-    /** Telegram bot for checking / buying a subscription: @your_subscription_bot. */
+    /** Telegram bot for checking / buying a subscription: @corsxray2bot. */
     private fun openSubscriptionBot() {
         val ctx = context ?: return
         // tg:// first (opens the app directly), web profile as fallback.
-        val tgUri = android.net.Uri.parse("tg://resolve?domain=your_subscription_bot")
-        val webUri = android.net.Uri.parse("https://t.me/your_subscription_bot")
+        val tgUri = android.net.Uri.parse("tg://resolve?domain=corsxray2bot")
+        val webUri = android.net.Uri.parse("https://t.me/corsxray2bot")
         val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, tgUri)
             .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
@@ -430,7 +501,7 @@ class MainFragment : Fragment(R.layout.fragment_main_screen), XrayServersListene
             usedTotal <= 0L && quotaTotal <= 0L -> null
             quotaTotal > 0L -> getString(
                 R.string.stat_traffic_of,
-                formatBytes(usedTotal),
+                formatBytesCompact(usedTotal, quotaTotal),
                 formatBytes(quotaTotal),
             )
             else -> getString(R.string.stat_traffic_unlimited, formatBytes(usedTotal))
@@ -444,6 +515,17 @@ class MainFragment : Fragment(R.layout.fragment_main_screen), XrayServersListene
         }
         val trafficFraction = if (quotaTotal > 0L) (usedTotal.toFloat() / quotaTotal) else null
         view.bindSubscriptionStats(trafficText, daysText, trafficFraction)
+    }
+
+    /**
+     * Formats [bytes] but drops the unit suffix when it matches the unit that
+     * [reference] would render in, so a "used / total" pair reads as
+     * "10 / 100 GB" instead of "10.0 GB / 100.0 GB".
+     */
+    private fun formatBytesCompact(bytes: Long, reference: Long): String {
+        val full = formatBytes(bytes)
+        val unit = formatBytes(reference).substringAfterLast(' ', "")
+        return if (unit.isNotEmpty() && full.endsWith(" $unit")) full.removeSuffix(" $unit") else full
     }
 
     private fun formatBytes(bytes: Long): String {
@@ -491,10 +573,10 @@ class MainFragment : Fragment(R.layout.fragment_main_screen), XrayServersListene
         }
         ConfirmActionSheet.show(
             manager = parentFragmentManager,
-            title = getString(R.string.whitelist_non_lte_title),
-            subtitle = getString(R.string.whitelist_non_lte_body),
-            confirmLabel = getString(R.string.whitelist_non_lte_confirm),
-            cancelLabel = getString(R.string.sheet_cancel),
+            title = getString(R.string.wb_confirm_title),
+            subtitle = getString(R.string.wb_confirm_sub),
+            confirmLabel = getString(R.string.wb_confirm_yes),
+            cancelLabel = getString(R.string.wb_confirm_no),
             onConfirm = { connect() },
         )
     }

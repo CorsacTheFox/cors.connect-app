@@ -15,11 +15,14 @@ sealed class ConnectTarget {
     object WhitelistBypass : ConnectTarget()
 
     /**
-     * Internal-only bookkeeping for a specific auto-provisioned call once
+     * A manually added call link (VK / Telemost / WB Stream / DION), saved via
+     * [bypass.whitelist.util.Prefs.addDestination] — see
+     * [bypass.whitelist.ui.AddXraySubscriptionSheet], which auto-detects a
+     * pasted/scanned call link and routes it here instead of the Xray import
+     * path. Also used internally for the auto-provisioned call once
      * [WhitelistBypass] has produced one (see
      * [bypass.whitelist.MainActivity.startJoinFor]'s `pendingConnectTarget`
-     * retry-after-reset path). Never constructed from Main screen list
-     * selection — the list only ever offers [WhitelistBypass].
+     * retry-after-reset path).
      */
     data class Instance(val config: CallConfig) : ConnectTarget()
 

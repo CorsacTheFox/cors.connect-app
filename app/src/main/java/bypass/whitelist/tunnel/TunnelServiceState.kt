@@ -27,7 +27,8 @@ object TunnelServiceState {
         } == true
         val proxyActive = ProxyService.instance?.let { it.isRunning || it.stopInProgress } == true
         val xrayActive = XrayVpnService.instance?.let {
-            it.isRunning || it.startInProgress || (it.stopInProgress && !it.isStopStale())
+            it.isRunning || it.startInProgress || it.isAutoRecovering ||
+                (it.stopInProgress && !it.isStopStale())
         } == true
         return vpnActive || proxyActive || xrayActive
     }

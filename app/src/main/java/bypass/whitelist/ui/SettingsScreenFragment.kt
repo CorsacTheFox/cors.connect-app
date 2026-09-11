@@ -90,6 +90,23 @@ class SettingsScreenFragment : Fragment(R.layout.fragment_settings_screen) {
             DnsActionSheet.show(parentFragmentManager) { rebuild() }
         }
 
+        ui.addRow(card, R.drawable.ic_setting_proxy, getString(R.string.settings_row_link_method), null, getString(Prefs.corsLinkMethod.labelRes)) {
+            ChoiceActionSheet.show(
+                manager = parentFragmentManager,
+                title = getString(R.string.settings_row_link_method),
+                options = cc.cors.connect.cors.CorsLinkMethod.entries.map {
+                    ChoiceActionSheet.Option(it.name, getString(it.labelRes))
+                },
+                selectedId = Prefs.corsLinkMethod.name,
+            ) { picked ->
+                val newMethod = cc.cors.connect.cors.CorsLinkMethod.valueOf(picked.id)
+                if (newMethod != Prefs.corsLinkMethod) {
+                    Prefs.corsLinkMethod = newMethod
+                    rebuild()
+                }
+            }
+        }
+
         return section
     }
 

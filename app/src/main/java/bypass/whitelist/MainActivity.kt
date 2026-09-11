@@ -4,6 +4,7 @@ import android.Manifest
 import android.animation.ArgbEvaluator
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -123,6 +124,7 @@ class MainActivity :
     @Volatile private var resetInProgress: Boolean = false
     @Volatile private var overlayVisible: Boolean = false
     @Volatile private var resetGeneration: Long = 0L
+    @Volatile private var restartScheduled: Boolean = false
     private var pendingConnectTarget: ConnectTarget? = null
     @Volatile private var pendingVpnStart: (() -> Unit)? = null
     private val navColorEvaluator = ArgbEvaluator()
@@ -1311,7 +1313,7 @@ class MainActivity :
                 if (stuckAfterForce) {
                     runOnUiThread {
                         if (isResetCurrent(resetId)) {
-                            forceUnlockReset(getString(R.string.status_still_shutting_down))
+                            forceUnlockOrRestart(getString(R.string.status_still_shutting_down))
                         }
                     }
                     return@thread
@@ -1389,6 +1391,52 @@ class MainActivity :
         }
     }
 
+    /**
+     * End state of a stuck [fullReset]: if the local SOCKS ports are still held
+     * — the in-process WebRTC joiner (DC mode) can wedge on a stuck data
+     * channel, and [PortGuard] cannot kill it because it shares our PID — a
+     * plain unlock leaves every reconnect dead-ending on "previous session
+     * still stopping" until the user kills the app by hand. Restart the process
+     * ourselves in that case; otherwise just unlock.
+     */
+    private fun forceUnlockOrRestart(message: String) {
+        val portsStuck = !PortGuard.isPortAvailable(Prefs.socksPort) ||
+            !PortGuard.isPortAvailable(Prefs.xraySocksPort)
+        if (portsStuck && !restartScheduled) {
+            hardRestartProcess()
+        } else {
+            forceUnlockReset(message)
+        }
+    }
+
+    private fun hardRestartProcess() {
+        restartScheduled = true
+        appendLog("Local tunnel port stuck after force-stop — restarting the app to release it")
+        mainFragment()?.onStatusTextChanged(getString(R.string.status_still_shutting_down))
+        try {
+            val intent = packageManager.getLaunchIntentForPackage(packageName)
+                ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            if (intent != null) {
+                val pending = PendingIntent.getActivity(
+                    this, RESTART_REQUEST_CODE, intent,
+                    PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+                val alarm = getSystemService(android.content.Context.ALARM_SERVICE) as android.app.AlarmManager
+                alarm.set(
+                    android.app.AlarmManager.RTC,
+                    System.currentTimeMillis() + 400L,
+                    pending,
+                )
+            }
+        } catch (_: Exception) {
+            // Fall through to the kill regardless — a cold relaunch by the user
+            // still frees the port, which is the whole point.
+        }
+        finishAffinity()
+        android.os.Process.killProcess(android.os.Process.myPid())
+        Runtime.getRuntime().exit(0)
+    }
+
     private fun closeActiveHeadlessController() {
         val controller = activeHeadlessController
         activeHeadlessController = null
@@ -1428,6 +1476,7 @@ class MainActivity :
     companion object {
         const val ACTION_AUTO_START = "bypass.whitelist.AUTO_START"
         private const val SUB_PAGE_TAG = "sub_page"
+        private const val RESTART_REQUEST_CODE = 0x5245
         private const val STATE_CURRENT_TAB_ID = "current_tab_id"
         private const val CALL_LINK = ""
         private const val TAB_MAIN = 0

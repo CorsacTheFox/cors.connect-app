@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -5,7 +7,7 @@ plugins {
 
 val versionMajor = 0
 val versionMinor = 5
-val versionPatch = 5
+val versionPatch = 12
 val versionBuild = System.getenv("BUILD_NUMBER")?.toIntOrNull() ?: 0
 
 // Legacy builds (the "0.3" release) already shipped versionCode 1_000_000
@@ -15,26 +17,50 @@ val versionBuild = System.getenv("BUILD_NUMBER")?.toIntOrNull() ?: 0
 val computedVersionCode: Int =
     1_000_000 * (versionMajor + 1) + 1_000 * versionMinor + versionPatch + versionBuild
 
-// ---- Cors.Connect service configuration -------------------------------------
-// NOTE: this public repo ships only placeholders. Supply real values via env
-// vars (CI) or a gitignored local.properties. See SECURITY_CLEANUP.md.
-//
-// Helper: read from an env var, else from local.properties, else the placeholder.
-val localProps = java.util.Properties().apply {
+// =============================================================================
+// Secrets & environment-specific config — see local.properties.sample for the
+// full, documented list. Every key here resolves env var -> local.properties
+// -> a placeholder that is safe to publish (the app just stays unconfigured/
+// disabled for that feature until a real value is supplied). Real values for
+// this checkout live ONLY in local.properties (gitignored, never committed);
+// copy local.properties.sample to local.properties and fill it in there, or
+// export the same-named env var for CI builds. Nothing below this comment
+// should ever be a real credential — if you're adding a new one, follow the
+// same pattern.
+// =============================================================================
+val localProps = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) f.inputStream().use { load(it) }
 }
 fun cfg(key: String, default: String): String =
     System.getenv(key) ?: localProps.getProperty(key) ?: default
 
-// Base URL of the instance-creation service.
+// ---- Cors.Connect service configuration -------------------------------------
+// Base URL of the instance-creation service (a normal host, or a Yandex Cloud
+// Function proxy — see CorsClient's doc for the URL-shape difference).
 val corsBaseUrl: String = cfg("CORS_BASE_URL", "https://example.invalid/replace-with-your-endpoint").removeSuffix("/")
-// Shared static secret the server expects in the X-App-Token header (WB_APP_TOKEN).
-// While left as the placeholder, CorsClient.isConfigured stays false and the
-// instance-creation API is not called.
+// Shared static secret the server expects in the X-App-Token header
+// (WB_APP_TOKEN on the server). While left as the placeholder,
+// CorsClient.isConfigured stays false and the instance-creation API is never
+// called.
 val corsAppToken: String = cfg("CORS_APP_TOKEN", "REPLACE_WITH_WB_APP_TOKEN")
 // Telegram bot username the app opens to obtain initData for the claim flow.
 val corsTgBot: String = cfg("CORS_TG_BOT", "REPLACE_WITH_TELEGRAM_BOT_USERNAME")
+// ----------------------------------------------------------------------------
+
+// ---- VK relay fallback (see cc.cors.connect.api.VkLinkFallback) ------------
+// VK community access token (messages scope): used to call
+// messages.getHistory when beta.cors-fox.cc AND the Yandex Function proxy are
+// both unreachable. This token can also *send* messages as the bot if
+// extracted from the APK, so it's a live credential, not a static shared
+// secret — keep it out of source the same way as corsAppToken above. While
+// left as the placeholder, the fallback is simply disabled (see
+// VkLinkFallback.isConfigured).
+val vkCommunityToken: String = cfg("VK_COMMUNITY_TOKEN", "")
+// The relay conversation's peer id (the community admin's VK numeric id) —
+// must match WB_VK_RELAY_PEER_ID on the server.
+val vkRelayPeerId: String = cfg("VK_RELAY_PEER_ID", "")
+val vkApiVersion: String = cfg("VK_API_VERSION", "5.199")
 // ----------------------------------------------------------------------------
 
 android {
@@ -55,6 +81,9 @@ android {
         buildConfigField("String", "CORS_BASE_URL", "\"$corsBaseUrl\"")
         buildConfigField("String", "CORS_APP_TOKEN", "\"$corsAppToken\"")
         buildConfigField("String", "CORS_TG_BOT", "\"$corsTgBot\"")
+        buildConfigField("String", "VK_COMMUNITY_TOKEN", "\"$vkCommunityToken\"")
+        buildConfigField("String", "VK_RELAY_PEER_ID", "\"$vkRelayPeerId\"")
+        buildConfigField("String", "VK_API_VERSION", "\"$vkApiVersion\"")
     }
 
     buildFeatures {
@@ -71,17 +100,18 @@ android {
         }
     }
 
-    // The committed debug.keystore was removed for the public repo. The debug
-    // build now uses the Android Gradle Plugin's auto-generated
-    // ~/.android/debug.keystore (standard android/android credentials).
-    //
-    // Before shipping a real release, add your own signing config sourcing the
-    // keystore path and passwords from env vars / local.properties — see
-    // SECURITY_CLEANUP.md.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("../debug.keystore")
+            storePassword = "android"
+            keyAlias = "debug"
+            keyPassword = "android"
+        }
+    }
 
     buildTypes {
         debug {
-            // default debug signing (auto-generated keystore)
+            signingConfig = signingConfigs.getByName("debug")
         }
         release {
             isMinifyEnabled = false

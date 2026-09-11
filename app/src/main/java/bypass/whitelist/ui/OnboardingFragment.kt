@@ -15,7 +15,7 @@ import bypass.whitelist.util.Prefs
 /**
  * First-run onboarding — mirrors the Nocturne redesign prototype (screen 1a,
  * `isOnboard`): four setup steps plus a "sign in with Telegram" button that
- * opens @your_subscription_bot. Both buttons finish onboarding; the real sign-in
+ * opens @corsxray2bot. Both buttons finish onboarding; the real sign-in
  * happens later via the subscription link / Telegram deep-link callback.
  */
 class OnboardingFragment : Fragment() {
@@ -59,17 +59,17 @@ class OnboardingFragment : Fragment() {
         (activity as? Host)?.onOnboardingFinished()
     }
 
-    /** @your_subscription_bot: tg:// first (opens the app), web profile as fallback. */
+    /** @corsxray2bot: tg:// first (opens the app), web profile as fallback. */
     private fun openTelegramBot() {
         val ctx = context ?: return
-        val tg = Intent(Intent.ACTION_VIEW, Uri.parse("tg://resolve?domain=your_subscription_bot"))
+        val tg = Intent(Intent.ACTION_VIEW, Uri.parse("tg://resolve?domain=corsxray2bot"))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
             ctx.startActivity(tg)
         } catch (_: ActivityNotFoundException) {
             try {
                 ctx.startActivity(
-                    Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/your_subscription_bot"))
+                    Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/corsxray2bot"))
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 )
             } catch (_: ActivityNotFoundException) {

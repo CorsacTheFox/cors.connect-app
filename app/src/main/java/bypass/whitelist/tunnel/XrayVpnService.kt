@@ -108,6 +108,22 @@ class XrayVpnService : VpnService() {
         private const val NETWORK_CALLBACK_GRACE_MS = 5_000L
 
         /**
+         * Backoff between automatic reconnect attempts (watchdog / network
+         * change / a failed reconnect). The last value repeats for as long as
+         * recovery keeps failing — a bad-network stretch (carrier "searching",
+         * Wi-Fi ↔ mobile hand-off that takes tens of seconds) must never end in
+         * a permanent disconnect the user has to fix by hand.
+         */
+        private val RECONNECT_BACKOFF_MS = longArrayOf(3_000L, 5_000L, 10_000L, 20_000L, 30_000L)
+
+        /**
+         * While a reconnect is due but the device still has no usable network,
+         * re-poll this often instead of consuming a backoff step — keeps the
+         * retry cheap during a long network search.
+         */
+        private const val RECONNECT_NETWORK_WAIT_MS = 3_000L
+
+        /**
          * Hard cap on how long a stop may take (see [stop]): a hung native
          * `stopLoop` must not leave `stopInProgress` true forever — that made
          * `TunnelServiceState.isTunnelActive` report "tunnel running" until
@@ -163,6 +179,21 @@ class XrayVpnService : VpnService() {
     /** True while the device has no underlying network (watchdog pauses then). */
     @Volatile private var underlyingNetworkLost: Boolean = false
 
+    /**
+     * True while an automatic recovery (watchdog / network-change reconnect) is
+     * in progress. Failures during this window schedule another retry instead
+     * of tearing the tunnel down for good. Cleared once a health check passes
+     * or the user disconnects.
+     */
+    @Volatile private var autoRecovering: Boolean = false
+
+    /** Exposed for [TunnelServiceState.isTunnelActive] — recovery counts as "up". */
+    val isAutoRecovering: Boolean get() = autoRecovering
+
+    /** Consecutive auto-reconnect attempts — indexes [RECONNECT_BACKOFF_MS]. */
+    private val reconnectAttempts = java.util.concurrent.atomic.AtomicInteger(0)
+    private var reconnectRunnable: Runnable? = null
+
     private val healthFailures = java.util.concurrent.atomic.AtomicInteger(0)
     private var watchdogThread: Thread? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
@@ -184,6 +215,9 @@ class XrayVpnService : VpnService() {
             // Explicit user disconnect always wins over a pending watchdog
             // reconnect that may have raced with the button press.
             pendingRestart = false
+            autoRecovering = false
+            reconnectAttempts.set(0)
+            cancelReconnect()
             if (!isRunning && !startInProgress && !stopInProgress) {
                 safeStopSelf()
                 return START_NOT_STICKY
@@ -197,6 +231,8 @@ class XrayVpnService : VpnService() {
 
     override fun onDestroy() {
         pendingRestart = false
+        autoRecovering = false
+        cancelReconnect()
         stopWatchdog()
         unregisterNetworkCallback()
         if ((isRunning || startInProgress) && !stopInProgress) {
@@ -239,6 +275,13 @@ class XrayVpnService : VpnService() {
         // for the stop it scheduled itself.
         val restartAfterStop = pendingRestart
         pendingRestart = false
+        // A pending scheduled reconnect is superseded either way: a restart
+        // re-enters start() itself, a user/terminal stop must not fire it.
+        cancelReconnect()
+        if (!restartAfterStop) {
+            autoRecovering = false
+            reconnectAttempts.set(0)
+        }
         stopWatchdog()
         unregisterNetworkCallback()
         scheduleStopTimeout(disconnectCallback)
@@ -261,10 +304,11 @@ class XrayVpnService : VpnService() {
                     if (restartAfterStop) {
                         // Reconnect path: re-enter start() on the main thread
                         // exactly as onStartCommand would. start() re-reads
-                        // Prefs.activeXrayServer, so the reconnect always
-                        // uses the currently selected profile, and its own
-                        // health check disconnects (without another retry)
-                        // if the server is genuinely gone — no restart loop.
+                        // Prefs.activeXrayServer, so the reconnect always uses
+                        // the currently selected profile. If this attempt fails
+                        // (network still bad), failStart/failHealthCheck route
+                        // into scheduleReconnect for a backoff retry rather than
+                        // a permanent disconnect — see [autoRecovering].
                         Log.i(TAG, "Reconnecting Xray tunnel after watchdog/network failure")
                         TunnelServiceState.logCallback?.invoke("Reconnecting Xray tunnel…")
                         stopInProgress = false
@@ -296,8 +340,15 @@ class XrayVpnService : VpnService() {
             val fd = rawTunFd
             rawTunFd = null
             fd?.let { closeRawFd(it) }
+            val wasRecovering = autoRecovering
             safeStopSelf()
-            disconnectCallback?.invoke()
+            if (wasRecovering) {
+                // Engine shutdown hung mid-reconnect — don't report a terminal
+                // disconnect, just keep the recovery chain going.
+                scheduleReconnect("stop timed out during reconnect")
+            } else {
+                disconnectCallback?.invoke()
+            }
         }
         stopTimeoutRunnable = runnable
         mainHandler.postDelayed(runnable, STOP_TIMEOUT_MS)
@@ -318,18 +369,90 @@ class XrayVpnService : VpnService() {
         if (!isRunning && !startInProgress) return
         Log.w(TAG, "Tunnel restart requested: $reason")
         TunnelServiceState.logCallback?.invoke("Tunnel unstable ($reason) — reconnecting")
+        autoRecovering = true
         pendingRestart = true
         stop()
     }
 
+    /**
+     * Schedules the next automatic reconnect attempt with backoff instead of
+     * giving up. Used by every recoverable failure while [autoRecovering] is
+     * set (a reconnect whose VPN re-establish / core start / health check
+     * failed because the network is still bad). The tunnel toggle stays "on"
+     * (status [VpnStatus.STARTING]) so the user sees "reconnecting", not a
+     * dead switch. Only a user disconnect ([safeStopSelf] / ACTION_STOP)
+     * cancels the chain.
+     */
+    private fun scheduleReconnect(reason: String) {
+        if (isRunning || startInProgress) return
+        autoRecovering = true
+        cancelReconnect()
+        val attempt = reconnectAttempts.get().coerceIn(0, RECONNECT_BACKOFF_MS.size - 1)
+        val delay = RECONNECT_BACKOFF_MS[attempt]
+        Log.w(TAG, "Reconnect attempt ${reconnectAttempts.get() + 1} in ${delay}ms ($reason)")
+        TunnelServiceState.logCallback?.invoke("Xray reconnecting in ${delay / 1000}s — $reason")
+        runCatching { updateStatus(VpnStatus.STARTING) }
+        val runnable = Runnable { runReconnect() }
+        reconnectRunnable = runnable
+        mainHandler.postDelayed(runnable, delay)
+    }
+
+    private fun runReconnect() {
+        reconnectRunnable = null
+        if (isRunning || startInProgress || stopInProgress) return
+        if (!autoRecovering) return
+        // No usable network yet (carrier still searching, Wi-Fi ↔ mobile
+        // hand-off not finished) — re-poll without burning a backoff step so
+        // the reconnect fires promptly once connectivity is actually back.
+        if (underlyingNetworkLost || !hasUsableNetwork()) {
+            Log.i(TAG, "Reconnect deferred — no usable network yet")
+            TunnelServiceState.logCallback?.invoke("Waiting for network…")
+            val runnable = Runnable { runReconnect() }
+            reconnectRunnable = runnable
+            mainHandler.postDelayed(runnable, RECONNECT_NETWORK_WAIT_MS)
+            return
+        }
+        reconnectAttempts.incrementAndGet()
+        start()
+    }
+
+    private fun cancelReconnect() {
+        reconnectRunnable?.let { mainHandler.removeCallbacks(it) }
+        reconnectRunnable = null
+    }
+
+    /** True when the device currently has a network that claims internet. */
+    private fun hasUsableNetwork(): Boolean {
+        val cm = getSystemService(ConnectivityManager::class.java) ?: return true
+        val network = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(network) ?: return false
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
+    /**
+     * A [start] failure path. During automatic recovery it schedules another
+     * backoff retry — a network that's bad right now (carrier searching,
+     * hand-off in flight) is usually fine seconds later — so the tunnel never
+     * ends up permanently down after a transient drop. Outside recovery it's a
+     * genuine user-initiated connect failure: surface it and stop.
+     */
+    private fun failStart(reason: String) {
+        if (autoRecovering) {
+            scheduleReconnect(reason)
+        } else {
+            TunnelServiceState.vpnStatusCallback?.invoke(VpnStatus.CALL_FAILED)
+            stopSelf()
+        }
+    }
+
     private fun start() {
         if (isRunning || startInProgress) return
+        cancelReconnect()
         val server = Prefs.activeXrayServer
         if (server == null) {
             Log.e(TAG, "No active Xray server selected")
             TunnelServiceState.logCallback?.invoke("No active Xray server selected")
-            TunnelServiceState.vpnStatusCallback?.invoke(VpnStatus.CALL_FAILED)
-            stopSelf()
+            failStart("no active server")
             return
         }
         startInProgress = true
@@ -355,8 +478,7 @@ class XrayVpnService : VpnService() {
             Log.e(TAG, "Failed to establish VPN")
             startInProgress = false
             TunnelServiceState.logCallback?.invoke("Failed to establish VPN")
-            TunnelServiceState.vpnStatusCallback?.invoke(VpnStatus.CALL_FAILED)
-            stopSelf()
+            failStart("VPN interface unavailable")
             return
         }
         val fd = establishedFd.detachFd()
@@ -375,8 +497,7 @@ class XrayVpnService : VpnService() {
                 closeRawFd(fd)
                 rawTunFd = null
                 TunnelServiceState.logCallback?.invoke("Failed to start Xray core")
-                TunnelServiceState.vpnStatusCallback?.invoke(VpnStatus.CALL_FAILED)
-                stopSelf()
+                failStart("Xray core did not start")
                 return
             }
         } catch (t: Throwable) {
@@ -385,8 +506,7 @@ class XrayVpnService : VpnService() {
             closeRawFd(fd)
             rawTunFd = null
             TunnelServiceState.logCallback?.invoke("Xray engine error: ${t.message}")
-            TunnelServiceState.vpnStatusCallback?.invoke(VpnStatus.CALL_FAILED)
-            stopSelf()
+            failStart("Xray engine error")
             return
         }
 
@@ -486,6 +606,7 @@ class XrayVpnService : VpnService() {
                     if (!isRunning || stopInProgress) return@thread
                     Log.i(TAG, "Tunnel health check OK (${rtt}ms via $url)")
                     TunnelServiceState.logCallback?.invoke("Xray tunnel check OK: ${server.summary} (${rtt} ms)")
+                    onRecovered()
                     return@thread
                 }
                 failHealthCheck("tunnel passes no traffic via ${server.summary} — ${errors.joinToString("; ")}")
@@ -514,9 +635,32 @@ class XrayVpnService : VpnService() {
     private fun failHealthCheck(reason: String) {
         if (!isRunning || stopInProgress) return
         Log.e(TAG, "Tunnel health check failed: $reason")
+        if (autoRecovering) {
+            // This is the health check of a reconnect attempt that came up over
+            // a still-bad network. Don't surface a terminal failure — tear the
+            // dead tunnel down and let the pendingRestart path re-enter start(),
+            // whose own failure schedules the next backoff retry.
+            TunnelServiceState.logCallback?.invoke("Xray tunnel check failed: $reason — retrying")
+            pendingRestart = true
+            stop()
+            return
+        }
         TunnelServiceState.logCallback?.invoke("Xray tunnel check failed: $reason — disconnecting")
         updateStatus(VpnStatus.CALL_FAILED)
         stop()
+    }
+
+    /**
+     * A health check / watchdog / network-change probe just succeeded — the
+     * tunnel is genuinely passing traffic again, so clear the auto-recovery
+     * state and reset the backoff.
+     */
+    private fun onRecovered() {
+        reconnectAttempts.set(0)
+        if (autoRecovering) {
+            autoRecovering = false
+            TunnelServiceState.logCallback?.invoke("Xray tunnel recovered")
+        }
     }
 
     /**
@@ -553,6 +697,7 @@ class XrayVpnService : VpnService() {
 
                 if (ok) {
                     healthFailures.set(0)
+                    onRecovered()
                 } else {
                     val failures = healthFailures.incrementAndGet()
                     Log.w(TAG, "Watchdog check failed ($failures/$WATCHDOG_FAILURES_TO_RESTART)")
@@ -656,18 +801,33 @@ class XrayVpnService : VpnService() {
             Thread.sleep(HEALTH_CHECK_SETTLE_MS)
             if (!isRunning || stopInProgress) return@thread
             val server = Prefs.activeXrayServer ?: return@thread
-            if (probeServerTcp(server) != null) {
+
+            // A network that just came back from a long search (carrier
+            // re-attach, Wi-Fi ↔ mobile hand-off) can take tens of seconds
+            // before it actually carries traffic. Probe the server patiently
+            // before concluding it's unreachable — a single early failure here
+            // used to trigger a needless full reconnect.
+            var serverReachable = false
+            var probeAttempts = 0
+            while (!serverReachable && probeAttempts < 5 && isRunning && !stopInProgress) {
+                if (probeAttempts > 0) Thread.sleep(3_000L)
+                serverReachable = probeServerTcp(server) == null
+                probeAttempts++
+            }
+            if (!isRunning || stopInProgress) return@thread
+            if (!serverReachable) {
                 Log.w(TAG, "Server unreachable on new network — reconnecting")
                 requestRestart("network changed, server unreachable")
                 return@thread
             }
-            // The core may still be re-dialing on the new path — retry a few
-            // times before tearing the tunnel down, a Wi-Fi ↔ mobile flap
-            // doesn't have to kill an otherwise recoverable session.
+
+            // Server reachable — the core may still be re-dialing on the new
+            // path. Retry the end-to-end check for a while before tearing the
+            // tunnel down; a hand-off doesn't have to kill a recoverable session.
             var ok = false
             var attempts = 0
-            while (!ok && attempts < 3 && (isRunning && !stopInProgress)) {
-                if (attempts > 0) Thread.sleep(2_000L)
+            while (!ok && attempts < 6 && (isRunning && !stopInProgress)) {
+                if (attempts > 0) Thread.sleep(3_000L)
                 ok = try {
                     engine.measureDelay(HEALTH_CHECK_URLS[0])
                     true
@@ -680,6 +840,7 @@ class XrayVpnService : VpnService() {
             if (!ok) {
                 requestRestart("network changed, tunnel passes no traffic")
             } else {
+                onRecovered()
                 TunnelServiceState.logCallback?.invoke("Network changed — tunnel still OK")
             }
         }
@@ -691,6 +852,9 @@ class XrayVpnService : VpnService() {
     }
 
     private fun safeStopSelf() {
+        autoRecovering = false
+        reconnectAttempts.set(0)
+        cancelReconnect()
         stopInProgress = false
         stopStartedAtMs = 0L
         stopTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }

@@ -52,7 +52,7 @@
 
                 <data
                     android:scheme="https"
-                    android:host="applink.example.invalid"
+                    android:host="beta.cors-fox.cc"
                     android:pathPrefix="/tginit"
                     tools:ignore="Spelling" />
             </intent-filter>

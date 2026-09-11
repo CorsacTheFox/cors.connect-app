@@ -14,6 +14,26 @@ enum class CallPlatform(val id: String, val urlMarker: String) {
             else -> VK
         }
 
+        /**
+         * True when [url] looks like a video-call link this app can join and
+         * tunnel over (VK call, Telemost, WB Stream, DION) rather than an Xray
+         * share link or a subscription URL. Used by the "add" sheet to route a
+         * pasted/scanned link to the right destination automatically.
+         */
+        fun isCallLink(url: String): Boolean {
+            val trimmed = url.trim()
+            if (trimmed.startsWith(WBSTREAM.urlMarker, ignoreCase = true)) return true
+            if (trimmed.startsWith(DION.urlMarker, ignoreCase = true)) return true
+            if (trimmed.contains("dion.vc/event/", ignoreCase = true)) return true
+            if (trimmed.contains(TELEMOST.urlMarker, ignoreCase = true)) return true
+            if (trimmed.contains("vk.com", ignoreCase = true) &&
+                (trimmed.contains("/call/join/", ignoreCase = true) ||
+                    trimmed.contains("call=join", ignoreCase = true) ||
+                    trimmed.contains("im/mvcall/join", ignoreCase = true))
+            ) return true
+            return false
+        }
+
         fun extractRoomId(url: String): String {
             val trimmed = url.trim()
             if (trimmed.startsWith(WBSTREAM.urlMarker)) return trimmed.removePrefix(WBSTREAM.urlMarker).trim()

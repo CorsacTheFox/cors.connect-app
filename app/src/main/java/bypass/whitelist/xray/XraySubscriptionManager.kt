@@ -6,6 +6,7 @@ import bypass.whitelist.BuildConfig
 import bypass.whitelist.util.Prefs
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
 /** Thrown when a subscription URL can't be fetched or contains no usable servers. */
@@ -24,6 +25,43 @@ class XraySubscriptionException(message: String, cause: Throwable? = null) : Exc
 object XraySubscriptionManager {
 
     private const val TIMEOUT_MS = 15_000
+
+    /** Yandex Cloud Functions direct-invocation host (mirrors [cc.cors.connect.api.CorsClient]). */
+    private const val YANDEX_FUNCTIONS_HOST = "functions.yandexcloud.net"
+
+    /**
+     * Remnawave panel hosts whose subscription feed may be routed through the
+     * Yandex Cloud Function proxy (see `docs/yandex-proxy/index.js`, must match
+     * its `ALLOWED_HOSTS`). Subscriptions on any other host are always fetched
+     * directly.
+     */
+    private val PROXYABLE_PANEL_HOSTS = setOf("panel.cors-fox.cc")
+
+    /**
+     * If the Cors API base URL ([Prefs.corsBaseUrl]) is a Yandex Function proxy
+     * and [rawUrl] points at a [PROXYABLE_PANEL_HOSTS] host, rewrite the request
+     * to go through that same function: the real host and path+query are
+     * smuggled as `__host` / `__path` query params (Yandex has no path routing),
+     * exactly as [cc.cors.connect.api.CorsClient] does for the API. Any other
+     * URL — or a non-proxy base URL — is returned unchanged.
+     */
+    private fun proxiedSubscriptionUrl(rawUrl: String): String {
+        val proxyBase = Prefs.corsBaseUrl.trim().removeSuffix("/")
+        val proxyHost = runCatching { URL(proxyBase).host }.getOrNull() ?: return rawUrl
+        if (!proxyHost.equals(YANDEX_FUNCTIONS_HOST, ignoreCase = true)) return rawUrl
+
+        val target = runCatching { URL(rawUrl) }.getOrNull() ?: return rawUrl
+        if (PROXYABLE_PANEL_HOSTS.none { it.equals(target.host, ignoreCase = true) }) return rawUrl
+
+        val pathAndQuery = buildString {
+            append(target.path?.ifEmpty { "/" } ?: "/")
+            if (!target.query.isNullOrEmpty()) append('?').append(target.query)
+        }
+        val sep = if (proxyBase.contains('?')) "&" else "?"
+        return proxyBase + sep +
+            "__host=" + URLEncoder.encode(target.host, "UTF-8") +
+            "&__path=" + URLEncoder.encode(pathAndQuery, "UTF-8")
+    }
 
     /**
      * Sent on every subscription request. Panels (Remnawave, Marzban, 3x-ui…)
@@ -98,7 +136,9 @@ object XraySubscriptionManager {
     }
 
     private fun download(url: String): Pair<String, SubscriptionUserInfo?> {
-        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+        // Route through the Yandex Function proxy when configured & applicable;
+        // otherwise this is a no-op and we hit the panel directly.
+        val conn = (URL(proxiedSubscriptionUrl(url)).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = TIMEOUT_MS
             readTimeout = TIMEOUT_MS

@@ -190,7 +190,7 @@
                     android:fontFamily="monospace"
                     android:textColor="@color/ink"
                     android:textSize="13sp"
-                    tools:text="0.0.0.0" />
+                    tools:text="185.42.7.19" />
             </LinearLayout>
         </LinearLayout>
 

@@ -10,13 +10,51 @@ import bypass.whitelist.tunnel.SplitTunnelingMode
 import bypass.whitelist.tunnel.TunnelMode
 import bypass.whitelist.xray.XrayServer
 import bypass.whitelist.xray.XraySubscription
+import cc.cors.connect.cors.CorsLinkMethod
 
 object Prefs {
 
     private lateinit var prefs: SharedPreferences
+    private var filesDir: java.io.File? = null
 
     fun init(context: Context) {
         prefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+        filesDir = context.filesDir
+        restoreSubscriptionsIfMissing()
+        restoreSplitTunnelingIfMissing()
+    }
+
+    /** Durable copy of the imported subscriptions, kept outside SharedPreferences. */
+    private fun subscriptionMirrorFile(): java.io.File? =
+        filesDir?.let { java.io.File(it, "xray_subscriptions.backup.json") }
+
+    private fun writeSubscriptionMirror(json: String?) {
+        val file = subscriptionMirrorFile() ?: return
+        try {
+            if (json.isNullOrBlank()) file.delete() else file.writeText(json)
+        } catch (_: Exception) {
+            // Best-effort — the mirror is a safety net, not the source of truth.
+        }
+    }
+
+    /**
+     * The imported subscriptions are mirrored to a file in `filesDir` on every
+     * change (see the [xraySubscriptions] setter). If the SharedPreferences
+     * copy is ever lost while the mirror survives — a botched update, storage
+     * hiccup, an errant `clear()` — restore it here on startup so the user
+     * doesn't have to paste their subscription link again. A refresh right
+     * after (triggered from [bypass.whitelist.App]) re-expands the servers.
+     */
+    private fun restoreSubscriptionsIfMissing() {
+        if (!prefs.getString(PrefsKeys.XRAY_SUBSCRIPTIONS, "").isNullOrBlank()) return
+        val file = subscriptionMirrorFile() ?: return
+        val json = try {
+            if (file.exists()) file.readText() else return
+        } catch (_: Exception) {
+            return
+        }
+        if (XraySubscription.listFromJson(json).isEmpty()) return
+        prefs.edit { putString(PrefsKeys.XRAY_SUBSCRIPTIONS, json) }
     }
 
     var connectOnStart: Boolean
@@ -38,6 +76,18 @@ object Prefs {
         }
         set(value) = prefs.edit { putString(PrefsKeys.TUNNEL_MODE, value.name) }
 
+    /** How Whitelist Bypass obtains its output_link — see [CorsLinkMethod]. */
+    var corsLinkMethod: CorsLinkMethod
+        get() {
+            val name = prefs.getString(PrefsKeys.CORS_LINK_METHOD, CorsLinkMethod.AUTO.name)!!
+            return try {
+                CorsLinkMethod.valueOf(name)
+            } catch (_: IllegalArgumentException) {
+                CorsLinkMethod.AUTO
+            }
+        }
+        set(value) = prefs.edit { putString(PrefsKeys.CORS_LINK_METHOD, value.name) }
+
     var splitTunnelingMode: SplitTunnelingMode
         get() {
             val title = prefs.getString(PrefsKeys.SPLIT_TUNNELING_MODE, SplitTunnelingMode.NONE.name)!!
@@ -47,18 +97,84 @@ object Prefs {
                 SplitTunnelingMode.NONE
             }
         }
-        set(value) = prefs.edit { putString(PrefsKeys.SPLIT_TUNNELING_MODE, value.name) }
+        set(value) {
+            // commit = true: an APK update kills the process without flushing
+            // pending async apply() writes, which dropped a just-changed split
+            // routing mode back to OFF after an update. The file mirror is the
+            // second safety net (see restoreSplitTunnelingIfMissing).
+            prefs.edit(commit = true) { putString(PrefsKeys.SPLIT_TUNNELING_MODE, value.name) }
+            writeSplitTunnelingMirror()
+        }
 
     var splitTunnelingPackages: Set<String>
         get() = prefs.getStringSet(PrefsKeys.SPLIT_TUNNELING_PACKAGES, emptySet()) ?: emptySet()
-        set(value) = prefs.edit { putStringSet(PrefsKeys.SPLIT_TUNNELING_PACKAGES, value) }
+        set(value) {
+            // Store a defensive copy — putStringSet keeps a reference to the
+            // passed instance, and callers hand in a set the apps adapter goes
+            // on mutating. commit = true / mirror: see [splitTunnelingMode].
+            prefs.edit(commit = true) { putStringSet(PrefsKeys.SPLIT_TUNNELING_PACKAGES, HashSet(value)) }
+            writeSplitTunnelingMirror()
+        }
+
+    /** Durable copy of the split routing config, kept outside SharedPreferences. */
+    private fun splitTunnelingMirrorFile(): java.io.File? =
+        filesDir?.let { java.io.File(it, "split_tunneling.backup.json") }
+
+    private fun writeSplitTunnelingMirror() {
+        val file = splitTunnelingMirrorFile() ?: return
+        try {
+            val mode = prefs.getString(PrefsKeys.SPLIT_TUNNELING_MODE, SplitTunnelingMode.NONE.name)
+            val pkgs = prefs.getStringSet(PrefsKeys.SPLIT_TUNNELING_PACKAGES, emptySet()) ?: emptySet()
+            if (mode == SplitTunnelingMode.NONE.name && pkgs.isEmpty()) {
+                file.delete()
+                return
+            }
+            val json = org.json.JSONObject()
+            json.put("mode", mode)
+            json.put("packages", org.json.JSONArray(pkgs))
+            file.writeText(json.toString())
+        } catch (_: Exception) {
+            // Best-effort — the mirror is a safety net, not the source of truth.
+        }
+    }
+
+    /**
+     * Restores the split routing mode + package set from the file mirror when
+     * SharedPreferences lost it (a botched APK update dropping an unflushed
+     * write is the reported cause — the mode came back as OFF). Mirrors the
+     * approach used for Xray subscriptions.
+     */
+    private fun restoreSplitTunnelingIfMissing() {
+        if (prefs.contains(PrefsKeys.SPLIT_TUNNELING_MODE)) return
+        val file = splitTunnelingMirrorFile() ?: return
+        val json = try {
+            if (file.exists()) org.json.JSONObject(file.readText()) else return
+        } catch (_: Exception) {
+            return
+        }
+        val mode = json.optString("mode", SplitTunnelingMode.NONE.name)
+        val pkgs = json.optJSONArray("packages")?.let { arr ->
+            (0 until arr.length()).mapNotNull { arr.optString(it).takeIf(String::isNotBlank) }.toHashSet()
+        } ?: hashSetOf()
+        prefs.edit(commit = true) {
+            putString(PrefsKeys.SPLIT_TUNNELING_MODE, mode)
+            putStringSet(PrefsKeys.SPLIT_TUNNELING_PACKAGES, pkgs)
+        }
+    }
 
     var autofillEnabled: Boolean
         get() = prefs.getBoolean(PrefsKeys.AUTOFILL_ENABLED, true)
         set(value) = prefs.edit { putBoolean(PrefsKeys.AUTOFILL_ENABLED, value) }
 
     var autofillName: String
-        get() = prefs.getString(PrefsKeys.AUTOFILL_NAME, "Hello")!!
+        get() {
+            prefs.getString(PrefsKeys.AUTOFILL_NAME, null)?.let { return it }
+            // First use: pick one random display name and keep it, instead of
+            // everyone joining calls as the same hard-coded "Hello".
+            val generated = NameGenerator.random()
+            prefs.edit(commit = true) { putString(PrefsKeys.AUTOFILL_NAME, generated) }
+            return generated
+        }
         set(value) = prefs.edit { putString(PrefsKeys.AUTOFILL_NAME, value) }
 
     var headless: Boolean
@@ -173,7 +289,11 @@ object Prefs {
 
     var xraySubscriptions: List<XraySubscription>
         get() = XraySubscription.listFromJson(prefs.getString(PrefsKeys.XRAY_SUBSCRIPTIONS, "") ?: "")
-        set(value) = prefs.edit { putString(PrefsKeys.XRAY_SUBSCRIPTIONS, XraySubscription.listToJson(value)) }
+        set(value) {
+            val json = XraySubscription.listToJson(value)
+            prefs.edit { putString(PrefsKeys.XRAY_SUBSCRIPTIONS, json) }
+            writeSubscriptionMirror(if (value.isEmpty()) null else json)
+        }
 
     var xraySocksPort: Long
         get() = prefs.getLong(PrefsKeys.XRAY_SOCKS_PORT, Ports.DEFAULT_XRAY_SOCKS)
@@ -407,6 +527,8 @@ object Prefs {
             if (keepXrayActiveId != null) putString(PrefsKeys.XRAY_ACTIVE_SERVER_ID, keepXrayActiveId)
             if (keepXraySubscriptions != null) putString(PrefsKeys.XRAY_SUBSCRIPTIONS, keepXraySubscriptions)
         }
+        // The mirror would otherwise resurrect the split config on next launch.
+        writeSplitTunnelingMirror()
     }
 
     /** Clears every imported Xray server and subscription (keeps other settings). */

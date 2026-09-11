@@ -81,6 +81,15 @@ class CorsInstanceController(
     fun start() {
         stopped = false
         bg {
+            // VK-only: skip the server entirely, straight to the relay link.
+            // Always anonymous/temporary — see CorsLinkMethod's doc.
+            if (Prefs.corsLinkMethod == CorsLinkMethod.VK_ONLY) {
+                status("cors_status_creating")
+                if (!tryVkFallback()) {
+                    failDetail("cors_status_network", "VK: " + (cc.cors.connect.api.VkLinkFallback.lastFailureReason ?: "unknown failure"))
+                }
+                return@bg
+            }
             if (!client.isConfigured) {
                 failRes("cors_status_token_missing")
                 return@bg
@@ -147,7 +156,23 @@ class CorsInstanceController(
                 }
             } catch (e: CorsException) {
                 when (e.code) {
-                    0 -> failRes("cors_status_network")
+                    // Network/protocol failure reaching beta.cors-fox.cc AND the
+                    // Yandex Function proxy (CorsClient already tried both,
+                    // plus operator-DNS IPs). In AUTO mode, last resort: read a
+                    // link the backend has already pushed to VK — same 5-min
+                    // anonymous TTL as the direct flow, just delivered over a
+                    // channel that survives more aggressive carrier
+                    // whitelists. SERVER_ONLY never falls back.
+                    0 -> {
+                        val autoMode = Prefs.corsLinkMethod == CorsLinkMethod.AUTO
+                        if (!autoMode || !tryVkFallback()) {
+                            if (autoMode) {
+                                failDetail("cors_status_network", "VK: " + (cc.cors.connect.api.VkLinkFallback.lastFailureReason ?: "unknown failure"))
+                            } else {
+                                failRes("cors_status_network")
+                            }
+                        }
+                    }
                     404 -> failRes("cors_status_disabled")
                     429 -> failRes("cors_status_cap")
                     else -> failDetail("cors_status_failed", e.detail)
@@ -156,6 +181,27 @@ class CorsInstanceController(
                 failDetail("cors_status_failed", e.message ?: "error")
             }
         }
+    }
+
+    /**
+     * Reads the latest link relayed via VK (see [cc.cors.connect.api.VkLinkFallback])
+     * and hands it to the host exactly like a normal ready output_link. Returns
+     * false when VK isn't configured or didn't yield a link, so the caller
+     * falls back to the ordinary network-failure message. There is no
+     * instance/claim bookkeeping here — the backend owns that instance's
+     * lifecycle on its own (see vk_relay.py); this app instance never calls
+     * claim/heartbeat/stop for it.
+     */
+    private fun tryVkFallback(): Boolean {
+        val link = cc.cors.connect.api.VkLinkFallback.fetchLatestLink() ?: return false
+        val config = CallConfig.newWith(name = resString("cors_instance_name"), url = link)
+        post {
+            if (!stopped) {
+                host.onCorsStatus(resString("cors_status_ready"))
+                host.onCorsOutputReady(config)
+            }
+        }
+        return true
     }
 
     /** Resumes the claim step after Telegram initData has arrived. */

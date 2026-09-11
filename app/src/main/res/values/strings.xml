@@ -74,7 +74,7 @@
     <string name="empty_calls_title">Add your first connect</string>
     <string name="empty_calls_sub">Paste a connect link to save it</string>
     <string name="auth_required_hint">Without sign-in, Whitelist Bypass runs for 5 minutes, then the session drops — add a subscription</string>
-    <string name="auth_hint_bot_link">Open @your_subscription_bot</string>
+    <string name="auth_hint_bot_link">Open @corsxray2bot</string>
 
     <string name="empty_connections_title">Add your first connection</string>
     <string name="empty_connections_sub">Add a Whitelist Bypass connect or an Xray server</string>
@@ -114,6 +114,7 @@
     <string name="xray_sheet_error_bad_link">Couldn\'t parse that share link</string>
     <string name="xray_sheet_error_unrecognized">Enter a vless://, vmess:// or trojan:// link or a subscription http(s):// URL</string>
     <string name="xray_sheet_error_subscription">Couldn\'t fetch or parse that subscription</string>
+    <string name="xray_sheet_error_duplicate">This subscription is already added</string>
     <plurals name="xray_toast_subscription_imported">
         <item quantity="one">Imported 1 server</item>
         <item quantity="other">Imported %d servers</item>
@@ -160,7 +161,7 @@
     <string name="stat_unlimited">unlimited</string>
     <string name="stat_no_expiry">--</string>
     <string name="stat_expired">expired</string>
-    <string name="stat_traffic_unlimited">%1$s used</string>
+    <string name="stat_traffic_unlimited">%1$s / ∞</string>
     <string name="stat_traffic_of">%1$s / %2$s</string>
     <string name="stat_days_value">%1$d</string>
     <string name="stat_uptime">Uptime</string>
@@ -201,10 +202,6 @@
     <string name="sheet_save_short">Save</string>
     <string name="sheet_cancel">Cancel</string>
 
-    <string name="whitelist_non_lte_title">Connect over Wi-Fi?</string>
-    <string name="whitelist_non_lte_body">Whitelist Bypass is meant for a mobile (LTE) connection — it works around carrier-level blocking. On Wi-Fi or Ethernet it usually has no effect. Connect anyway?</string>
-    <string name="whitelist_non_lte_confirm">Connect anyway</string>
-
     <string name="paste_from_clipboard">Paste from clipboard</string>
     <string name="clipboard_empty">Clipboard is empty</string>
     <string name="scan_qr_title">Scan QR code</string>
@@ -214,6 +211,10 @@
     <string name="settings_row_tunnel_mode">Tunnel mode</string>
     <string name="tunnel_mode_dc">DC</string>
     <string name="tunnel_mode_video">Video</string>
+    <string name="settings_row_link_method">Link method</string>
+    <string name="cors_link_method_auto">Auto (server → VK)</string>
+    <string name="cors_link_method_server">Server only</string>
+    <string name="cors_link_method_vk">VK only</string>
     <string name="dns_mode_system">System</string>
     <string name="dns_mode_custom">Custom</string>
     <string name="settings_row_vp8">VP8 settings</string>
@@ -373,7 +374,7 @@
     <string name="ob_sub">Add this device through the Telegram bot — your subscriptions land in the app automatically.</string>
     <string name="ob_auth">Sign in with Telegram</string>
     <string name="ob_skip">Set up later</string>
-    <string name="ob_step_1_title">Open @your_subscription_bot</string>
+    <string name="ob_step_1_title">Open @corsxray2bot</string>
     <string name="ob_step_1_sub">Go to “Add device”</string>
     <string name="ob_step_2_title">Tap “Add subscription”</string>
     <string name="ob_step_2_sub">VLESS subscriptions appear under Xray</string>

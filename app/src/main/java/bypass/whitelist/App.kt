@@ -38,6 +38,14 @@ class App : Application() {
                 subscriptionRefreshHandler.postDelayed(this, SUBSCRIPTION_REFRESH_INTERVAL_MS)
             }
         }
+        // One refresh shortly after launch too — re-expands the servers for a
+        // subscription list that was just restored from the durable mirror
+        // (see Prefs.restoreSubscriptionsIfMissing) instead of waiting a full
+        // interval for the first tick.
+        subscriptionRefreshHandler.postDelayed(
+            { if (Prefs.xraySubscriptions.isNotEmpty()) bypass.whitelist.xray.XraySubscriptionRefresher.refreshAll() },
+            3_000L,
+        )
         subscriptionRefreshHandler.postDelayed(tick, SUBSCRIPTION_REFRESH_INTERVAL_MS)
     }
 

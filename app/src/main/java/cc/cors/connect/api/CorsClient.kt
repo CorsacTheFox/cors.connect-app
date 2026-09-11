@@ -1,12 +1,18 @@
 package cc.cors.connect.api
 
+import bypass.whitelist.App
 import bypass.whitelist.BuildConfig
+import bypass.whitelist.tunnel.TunnelServiceState
 import bypass.whitelist.util.Prefs
 import org.json.JSONObject
 import java.net.HttpURLConnection
+import java.net.Inet4Address
+import java.net.InetAddress
 import java.net.URL
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import javax.net.ssl.HostnameVerifier
+import javax.net.ssl.HttpsURLConnection
 
 /**
  * Minimal client for the Cors.Connect Android instance-creation API
@@ -19,7 +25,18 @@ import java.nio.charset.StandardCharsets
 class CorsClient(
     private val baseUrl: String = Prefs.corsBaseUrl,
     private val appToken: String = BuildConfig.CORS_APP_TOKEN,
+    private val context: android.content.Context = App.instance,
 ) {
+
+    /**
+     * IPs for the Yandex Function proxy host, resolved via the mobile
+     * operator's DNS after the platform resolver (settings DNS) failed. Pinned
+     * for the lifetime of this client so the whole bootstrap sequence
+     * (health → create → poll → claim) keeps hitting the same working endpoint
+     * instead of re-brute-forcing on every call. Once the tunnel is up the
+     * pipeline resolves through the settings DNS again and this is ignored.
+     */
+    @Volatile private var pinnedOperatorIps: List<InetAddress>? = null
 
     init {
         require(baseUrl.isNotBlank()) { "CORS_BASE_URL not set" }
@@ -118,7 +135,89 @@ class CorsClient(
         body: JSONObject? = null,
         bearer: String? = null,
     ): JSONObject {
-        val conn = (URL(buildRequestUrl(path)).openConnection() as HttpURLConnection).apply {
+        val urlStr = buildRequestUrl(path)
+        val openers = candidateConnections(urlStr)
+        var lastNetworkError: Exception? = null
+        for ((index, opener) in openers.withIndex()) {
+            val conn = try {
+                opener()
+            } catch (e: Exception) {
+                lastNetworkError = e
+                continue
+            }
+            try {
+                return exchange(conn, method, body, bearer)
+            } catch (e: CorsException) {
+                // code 0 == network/protocol failure (unreachable host, timeout).
+                // Fall through to the next candidate endpoint if there is one.
+                if (e.code == 0 && index < openers.lastIndex) {
+                    lastNetworkError = e.cause as? Exception ?: e
+                    continue
+                }
+                throw e
+            }
+        }
+        throw CorsException(0, lastNetworkError?.message ?: "network error", lastNetworkError)
+    }
+
+    /**
+     * Ordered list of ways to open the connection for [urlStr].
+     *
+     * Normally a single direct attempt (the platform resolver uses whatever DNS
+     * the app / tunnel is configured for). When the request targets the Yandex
+     * Cloud Function proxy AND the tunnel is not up yet AND the platform
+     * resolver can't resolve that host, we additionally try each address
+     * obtained from the mobile operator's own DNS servers — those answer for
+     * Yandex infrastructure even when the settings DNS (e.g. 1.1.1.1) is
+     * hijacked or black-holed by the carrier. A plain direct attempt is kept
+     * last as a safety net.
+     */
+    private fun candidateConnections(urlStr: String): List<() -> HttpURLConnection> {
+        val url = URL(urlStr)
+        val direct: () -> HttpURLConnection = { url.openConnection() as HttpURLConnection }
+        if (!isYandexFunctionProxy || tunnelUp()) return listOf(direct)
+
+        val host = url.host
+        val ips = pinnedOperatorIps ?: when {
+            OperatorDns.platformResolves(host) -> emptyList()
+            else -> OperatorDns.resolveViaOperators(host).also {
+                if (it.isNotEmpty()) pinnedOperatorIps = it
+            }
+        }
+        if (ips.isEmpty()) return listOf(direct)
+        return ips.map { ip -> { openViaIp(url, ip) } } + direct
+    }
+
+    /** True while the VPN tunnel is established (best-effort; false on error). */
+    private fun tunnelUp(): Boolean =
+        runCatching { TunnelServiceState.isTunnelActive(context) }.getOrDefault(false)
+
+    /**
+     * Opens a connection to [url] but dialing [ip] directly, preserving the
+     * original host for the `Host` header, TLS SNI and certificate matching.
+     */
+    private fun openViaIp(url: URL, ip: InetAddress): HttpURLConnection {
+        val port = if (url.port != -1) url.port else url.defaultPort
+        val bare = ip.hostAddress?.substringBefore('%') ?: throw java.io.IOException("no address")
+        val hostForUrl = if (ip is Inet4Address) bare else "[$bare]"
+        val ipUrl = URL(url.protocol, hostForUrl, port, url.file)
+        val conn = ipUrl.openConnection() as HttpURLConnection
+        conn.setRequestProperty("Host", url.host)
+        if (conn is HttpsURLConnection) {
+            conn.sslSocketFactory = OperatorDns.SniSocketFactory(conn.sslSocketFactory, url.host)
+            val base = HttpsURLConnection.getDefaultHostnameVerifier()
+            conn.hostnameVerifier = HostnameVerifier { _, session -> base.verify(url.host, session) }
+        }
+        return conn
+    }
+
+    private fun exchange(
+        conn: HttpURLConnection,
+        method: String,
+        body: JSONObject?,
+        bearer: String?,
+    ): JSONObject {
+        conn.apply {
             requestMethod = method
             connectTimeout = TIMEOUT_MS
             readTimeout = TIMEOUT_MS
@@ -176,7 +275,7 @@ class CorsClient(
     /**
      * Builds the request URL for [path] (e.g. `/api/app/health`).
      *
-     * For a normal server ([baseUrl] like `https://your-backend.example.com`) the path
+     * For a normal server ([baseUrl] like `https://beta.cors-fox.cc`) the path
      * is appended directly. When [baseUrl] points at a Yandex Cloud Function
      * (`functions.yandexcloud.net`) the path is *not* appended — that domain
      * does not support path routing and treats `/<id>/api/...` as a different

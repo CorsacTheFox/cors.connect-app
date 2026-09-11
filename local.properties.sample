@@ -1,17 +1,60 @@
-# Copy to `local.properties` (gitignored) and fill in real values.
-# Environment variables of the same name override these.
+# Copy this file to `local.properties` (already gitignored — see the header
+# comment inside local.properties itself) and fill in real values there.
+# Every key below can also be set as an environment variable of the same
+# name (env wins over local.properties) — that's the path for CI builds.
+#
+# Nothing in THIS file (the .sample) should ever be a real credential: it's
+# committed to the repo and published alongside the source. Real values only
+# ever live in the gitignored local.properties on your machine.
+#
+# While any key below is left unset / at its placeholder, the app builds and
+# runs fine — the feature it gates just stays disabled (see the "behavior
+# when unset" note on each one).
 
-# Android SDK location (regenerated automatically by Android Studio on first sync)
+# ---- Android SDK ----
+# Regenerated automatically by Android Studio on first sync; only needed for
+# command-line Gradle builds outside the IDE.
 sdk.dir=/path/to/your/Android/sdk
 
-# ---- Cors.Connect backend configuration ----
-# Base URL of your instance-creation service.
-CORS_BASE_URL=https://your-backend.example.com
+# ---- Cors.Connect backend (see app/build.gradle.kts + CorsClient.kt) ----
 
-# Shared static secret; must match the server's WB_APP_TOKEN / X-App-Token.
-# Until this is set, CorsClient.isConfigured stays false and the
-# instance-creation API is never called (the app still builds and runs).
-CORS_APP_TOKEN=your-shared-secret
+# Base URL of the instance-creation service: either a normal host
+# (https://your-backend.example.com) or a Yandex Cloud Function proxy URL
+# (https://functions.yandexcloud.net/<function-id>) — CorsClient detects
+# which shape it is and adapts how it builds request URLs.
+# Behavior when unset: the app can't be built without SOME value here (no
+# safe placeholder — pick whichever backend you're pointing at).
+CORS_BASE_URL=https://example.invalid/replace-with-your-endpoint
 
-# Telegram bot username the app opens to obtain WebApp initData for the claim flow.
-CORS_TG_BOT=your_telegram_bot_username
+# Shared static secret sent as the X-App-Token header; must match the
+# server's WB_APP_TOKEN env var.
+# Behavior when unset: CorsClient.isConfigured stays false — the
+# instance-creation API (Whitelist Bypass) is never called, everything else
+# in the app still works.
+CORS_APP_TOKEN=REPLACE_WITH_WB_APP_TOKEN
+
+# Telegram bot username the app opens (deep link) to obtain WebApp initData
+# for the legacy claim flow.
+# Behavior when unset: the Telegram sign-in entry point just won't resolve to
+# a real bot; link-auth (the primary sign-in path) is unaffected.
+CORS_TG_BOT=REPLACE_WITH_TELEGRAM_BOT_USERNAME
+
+# ---- VK relay fallback (see VkLinkFallback.kt + CorsInstanceController.kt) ----
+# Last-resort way to fetch the Whitelist Bypass link when the backend above
+# is completely unreachable (some carrier whitelists block it but leave
+# api.vk.com open) — see vk_relay.py on the server for the other half of this.
+
+# VK community ("group") access token with the "messages" right. NOTE: unlike
+# CORS_APP_TOKEN above, this is a LIVE credential — whoever holds it can also
+# *send* messages as the bot, not just read. Never give this the same
+# treatment as a static shared secret; keep it out of source entirely.
+# Behavior when unset: the VK fallback is disabled; "Auto" link method
+# behaves exactly like "Server only".
+VK_COMMUNITY_TOKEN=
+
+# Numeric VK user id of the community admin the relay link is sent to (must
+# match WB_VK_RELAY_PEER_ID on the server — see config.py).
+VK_RELAY_PEER_ID=
+
+# VK API version used for the fallback's HTTP calls. Rarely needs changing.
+VK_API_VERSION=5.199

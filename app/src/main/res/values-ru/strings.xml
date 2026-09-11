@@ -115,6 +115,7 @@
     <string name="xray_sheet_error_bad_link">Не удалось разобрать эту ссылку</string>
     <string name="xray_sheet_error_unrecognized">Введите ссылку vless://, vmess:// или trojan:// либо URL подписки http(s)://</string>
     <string name="xray_sheet_error_subscription">Не удалось загрузить или разобрать подписку</string>
+    <string name="xray_sheet_error_duplicate">Эта подписка уже добавлена</string>
     <plurals name="xray_toast_subscription_imported">
         <item quantity="one">Импортирован %d сервер</item>
         <item quantity="few">Импортировано %d сервера</item>
@@ -165,7 +166,7 @@
     <string name="stat_unlimited">безлимит</string>
     <string name="stat_no_expiry">--</string>
     <string name="stat_expired">истекла</string>
-    <string name="stat_traffic_unlimited">Использовано %1$s</string>
+    <string name="stat_traffic_unlimited">%1$s / ∞</string>
     <string name="stat_traffic_of">%1$s / %2$s</string>
     <string name="stat_days_value">%1$d</string>
     <string name="stat_uptime">Аптайм</string>
@@ -206,10 +207,6 @@
     <string name="sheet_save_short">Сохранить</string>
     <string name="sheet_cancel">Отмена</string>
 
-    <string name="whitelist_non_lte_title">Подключиться по Wi-Fi?</string>
-    <string name="whitelist_non_lte_body">Белые списки рассчитаны на мобильную сеть (LTE) — они обходят блокировки на стороне оператора. По Wi-Fi или Ethernet эффекта обычно нет. Всё равно подключиться?</string>
-    <string name="whitelist_non_lte_confirm">Всё равно подключиться</string>
-
     <string name="paste_from_clipboard">Вставить из буфера</string>
     <string name="clipboard_empty">Буфер обмена пуст</string>
     <string name="scan_qr_title">Сканировать QR-код</string>
@@ -219,6 +216,10 @@
     <string name="settings_row_tunnel_mode">Режим туннеля</string>
     <string name="tunnel_mode_dc">DC</string>
     <string name="tunnel_mode_video">Видео</string>
+    <string name="settings_row_link_method">Способ получения ссылки</string>
+    <string name="cors_link_method_auto">Авто (сервер → VK)</string>
+    <string name="cors_link_method_server">Только сервер</string>
+    <string name="cors_link_method_vk">Только VK</string>
     <string name="dns_mode_system">Системный</string>
     <string name="dns_mode_custom">Свой</string>
     <string name="settings_row_vp8">Настройки VP8</string>
@@ -376,7 +377,7 @@
     <string name="ob_sub">Подключите устройство через Telegram-бота — подписки появятся в приложении автоматически.</string>
     <string name="ob_auth">Войти через Telegram</string>
     <string name="ob_skip">Настроить позже</string>
-    <string name="ob_step_1_title">Откройте @your_subscription_bot</string>
+    <string name="ob_step_1_title">Откройте @corsxray2bot</string>
     <string name="ob_step_1_sub">Раздел «Добавить устройство»</string>
     <string name="ob_step_2_title">Нажмите «Добавить подписку»</string>
     <string name="ob_step_2_sub">VLESS-подписки появятся в разделе Xray</string>
@@ -386,5 +387,5 @@
     <string name="ob_step_4_sub">Whitelist Bypass или сервер из подписки</string>
     <string name="ob_free_note">Без подписки обход белых списков доступен на 5 минут, затем сессия обрывается. Войдите через Telegram, чтобы снять ограничение.</string>
     <string name="auth_required_hint">Без авторизации обход вайтлистов работает 5 минут, затем сессия обрывается — добавьте подписку</string>
-    <string name="auth_hint_bot_link">Открыть @your_subscription_bot</string>
+    <string name="auth_hint_bot_link">Открыть @corsxray2bot</string>
 </resources>

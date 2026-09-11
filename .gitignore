@@ -1,18 +1,27 @@
 *.iml
 .gradle
 /local.properties
+local.properties
 .idea/
 .DS_Store
-/build
+build/
 /captures
 .externalNativeBuild
 .cxx
-local.properties
 
 # Signing material — never commit keystores or their passwords.
 *.keystore
 *.jks
 
 # Per-machine tool config, not project config.
-.claude/settings.local.json
+.claude/
+.zcode/
+.artifacts/
 .kotlin/
+
+# Local build logs / scratch output, not part of the source tree.
+build_output.txt
+build_output_info.txt
+temp_lib/
+temp_lib_v2ray/
+temp_so/

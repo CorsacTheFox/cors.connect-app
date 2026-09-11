@@ -20,7 +20,7 @@ object AppUpdater {
 
     private const val OWNER = "CorsacTheFox"
     private const val REPO = "cors.connect-app"
-    private const val API_URL = "https://api.github.com/repos/$OWNER/$REPO/releases/latest"
+    private const val API_URL = "https://api.github.com/repos/$OWNER/$REPO/releases?per_page=30"
     const val RELEASES_URL = "https://github.com/$OWNER/$REPO/releases"
 
     data class Release(
@@ -75,20 +75,44 @@ object AppUpdater {
         try {
             if (conn.responseCode != 200) throw IOException("HTTP ${conn.responseCode}")
             val body = conn.inputStream.bufferedReader().use { it.readText() }
-            val json = JSONObject(body)
-            val tag = json.optString("tag_name")
-            if (tag.isEmpty()) throw IOException("no tag_name")
-            val apkUrl = json.optJSONArray("assets")?.let { assets ->
+            val releases = org.json.JSONArray(body)
+            // The list endpoint returns releases newest-first; skip drafts and
+            // prereleases so the shown notes match what users actually install.
+            val published = (0 until releases.length())
+                .mapNotNull { releases.optJSONObject(it) }
+                .filter { !it.optBoolean("draft") && !it.optBoolean("prerelease") }
+            val newest = published.firstOrNull { it.optString("tag_name").isNotEmpty() }
+                ?: throw IOException("no releases")
+
+            val tag = newest.optString("tag_name")
+            val apkUrl = newest.optJSONArray("assets")?.let { assets ->
                 (0 until assets.length())
                     .map { assets.optJSONObject(it) }
                     .firstOrNull { it?.optString("name", "")?.endsWith(".apk") == true }
                     ?.optString("browser_download_url")
             }
+
+            // Aggregate the notes of every release above the installed version,
+            // newest first, each under its own version heading — instead of
+            // only showing the latest one.
+            val newerNotes = published
+                .filter { isNewer(it.optString("tag_name")) }
+                .mapNotNull { rel ->
+                    val version = rel.optString("tag_name").ifEmpty { return@mapNotNull null }
+                    val notes = rel.optString("body").trim()
+                    if (notes.isEmpty()) version else "$version\n$notes"
+                }
+            val changelog = if (newerNotes.isNotEmpty()) {
+                newerNotes.joinToString("\n\n")
+            } else {
+                newest.optString("body").trim()
+            }
+
             return Release(
                 version = tag,
-                changelog = json.optString("body").trim(),
+                changelog = changelog,
                 apkUrl = apkUrl,
-                pageUrl = json.optString("html_url", RELEASES_URL),
+                pageUrl = newest.optString("html_url", RELEASES_URL),
             )
         } finally {
             conn.disconnect()

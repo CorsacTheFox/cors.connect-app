@@ -13,6 +13,9 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.FragmentManager
 import bypass.whitelist.R
+import bypass.whitelist.tunnel.CallConfig
+import bypass.whitelist.tunnel.CallPlatform
+import bypass.whitelist.tunnel.ConnectionMode
 import bypass.whitelist.util.Prefs
 import bypass.whitelist.xray.XrayServer
 import bypass.whitelist.xray.XraySubscription
@@ -23,10 +26,15 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import kotlin.concurrent.thread
 
 /**
- * Adds a standard Xray connection: either a single share link (`vless://…`,
- * `vmess://…`, `trojan://…`, saved directly as one [XrayServer]) or a
- * subscription URL (fetched, base64-decoded, and expanded into many servers —
- * see [XraySubscriptionManager]). Mirrors [AddDestinationSheet]'s shape.
+ * Single "add" entry point that auto-detects what was pasted/scanned:
+ *  - a call link (VK / Telemost / WB Stream / DION, see [CallPlatform.isCallLink])
+ *    is saved as a manual [CallConfig] destination (mirrors the retired
+ *    [AddDestinationSheet]);
+ *  - an Xray share link (`vless://…`, `vmess://…`, `trojan://…`) is saved
+ *    directly as one [XrayServer];
+ *  - any other `http(s)://` link is treated as a subscription URL (fetched,
+ *    base64-decoded, and expanded into many servers — see
+ *    [XraySubscriptionManager]).
  */
 class AddXraySubscriptionSheet : BottomSheetDialogFragment() {
 
@@ -71,6 +79,18 @@ class AddXraySubscriptionSheet : BottomSheetDialogFragment() {
             }
             val name = inputName.text.toString().trim()
 
+            if (CallPlatform.isCallLink(link)) {
+                val config = CallConfig.newWith(
+                    name = name.ifEmpty { CallConfig.suggestNameFor(link) },
+                    url = link,
+                )
+                Prefs.addDestination(config)
+                Prefs.connectionMode = ConnectionMode.INSTANCE
+                notifyChanged()
+                dismiss()
+                return@setOnClickListener
+            }
+
             if (link.isSupportedXrayShareLink()) {
                 val server = XrayServer.parseShareLink(link)
                 if (server == null) {
@@ -86,6 +106,14 @@ class AddXraySubscriptionSheet : BottomSheetDialogFragment() {
 
             if (!link.startsWith("http://", ignoreCase = true) && !link.startsWith("https://", ignoreCase = true)) {
                 showError(errorText, getString(R.string.xray_sheet_error_unrecognized))
+                return@setOnClickListener
+            }
+
+            // Reject a subscription URL that's already imported — otherwise the
+            // same feed gets added twice (each add mints a fresh id) and its
+            // servers are duplicated in the list.
+            if (Prefs.xraySubscriptions.any { sameSubscriptionUrl(it.url, link) }) {
+                showError(errorText, getString(R.string.xray_sheet_error_duplicate))
                 return@setOnClickListener
             }
 
@@ -152,6 +180,17 @@ class AddXraySubscriptionSheet : BottomSheetDialogFragment() {
                 }
             }
         }
+    }
+
+    /**
+     * Compares two subscription URLs for "the same feed": case-insensitive,
+     * ignoring a trailing slash and any surrounding whitespace. Deliberately
+     * conservative — only spellings that unambiguously point at one feed count
+     * as duplicates.
+     */
+    private fun sameSubscriptionUrl(a: String, b: String): Boolean {
+        fun norm(s: String) = s.trim().trimEnd('/').lowercase()
+        return norm(a) == norm(b)
     }
 
     private fun setLoading(button: Button, loading: Boolean) {

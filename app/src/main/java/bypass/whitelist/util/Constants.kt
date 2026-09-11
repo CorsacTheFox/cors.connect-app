@@ -97,6 +97,7 @@ object PrefsKeys {
     const val CORS_SESSION_TOKEN = "cors_session_token"
     const val CORS_USERNAME = "cors_username"
     const val CORS_SUBSCRIPTION_LINK = "cors_subscription_link"
+    const val CORS_LINK_METHOD = "cors_link_method"
 
     /** Stable per-install device id sent as `x-hwid` on subscription requests. */
     const val DEVICE_HWID = "device_hwid"

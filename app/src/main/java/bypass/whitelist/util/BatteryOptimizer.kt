@@ -25,6 +25,10 @@ object BatteryOptimizer {
      */
     fun requestIgnore(context: Context) {
         if (isIgnored(context)) return
+        // MIUI/HyperOS ignores the AOSP exemption and keeps killing background
+        // apps from its own "battery saver" list — send those devices straight
+        // to PowerKeeper's per-app screen instead.
+        if (isMiuiDevice() && openMiuiPowerKeeper(context)) return
         val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
             data = Uri.parse("package:${context.packageName}")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -39,6 +43,23 @@ object BatteryOptimizer {
             } catch (_: android.content.ActivityNotFoundException) {
             }
         }
+    }
+
+    private fun isMiuiDevice(): Boolean =
+        Build.MANUFACTURER.lowercase() in setOf("xiaomi", "redmi", "poco")
+
+    private fun openMiuiPowerKeeper(context: Context): Boolean = try {
+        context.startActivity(Intent().apply {
+            setClassName(
+                "com.miui.powerkeeper",
+                "com.miui.powerkeeper.ui.HiddenAppsConfigActivity",
+            )
+            putExtra("package_name", context.packageName)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        })
+        true
+    } catch (_: Exception) {
+        false
     }
 
     /** Guards against re-prompting twice inside one app process. */

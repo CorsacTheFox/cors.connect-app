@@ -30,10 +30,7 @@ object TelegramAuth {
      * in the server's `static/tg-auth.html`.
      */
     private const val CALLBACK_SCHEME = "https"
-    // Public repo placeholder. Set this to the verified HTTPS domain your
-    // Telegram bot's WebApp redirects to, and keep it in sync with the
-    // matching intent-filter host in AndroidManifest.xml. See SECURITY_CLEANUP.md.
-    private const val CALLBACK_HOST = "applink.example.invalid"
+    private const val CALLBACK_HOST = "beta.cors-fox.cc"
     private const val CALLBACK_PATH = "/tginit"
 
     /**
