@@ -3,11 +3,15 @@ package cc.cors.connect.api
 import bypass.whitelist.App
 import bypass.whitelist.BuildConfig
 import bypass.whitelist.tunnel.TunnelServiceState
+import bypass.whitelist.util.Net
 import bypass.whitelist.util.Prefs
+import bypass.whitelist.util.SocksAuth
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.Inet4Address
 import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.Proxy
 import java.net.URL
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -26,6 +30,14 @@ class CorsClient(
     private val baseUrl: String = Prefs.corsBaseUrl,
     private val appToken: String = BuildConfig.CORS_APP_TOKEN,
     private val context: android.content.Context = App.instance,
+    /**
+     * Route every request through the running tunnel's loopback SOCKS5
+     * instead of the carrier network. Used after connecting via a VK-relayed
+     * link: the app itself is excluded from its own VPN and the server is
+     * usually unreachable directly in that situation, but the tunnel exits on
+     * the server side, so the API is reachable through it.
+     */
+    private val viaTunnel: Boolean = false,
 ) {
 
     /**
@@ -87,6 +99,17 @@ class CorsClient(
             bearer = sessionToken?.takeIf { it.isNotBlank() },
         ))
     }
+
+    /**
+     * Resolves a VK-relayed call link to its (still unclaimed) instance and
+     * mints a claim token for it. 404 when the link isn't a live relay
+     * instance (expired, or already claimed).
+     */
+    fun instanceByLink(outputLink: String): CreateInstanceOut =
+        CreateInstanceOut.parse(request(
+            "POST", "/api/app/instances/by-link",
+            JSONObject().put("output_link", outputLink),
+        ))
 
     fun getInstance(instanceId: Int): InstanceState =
         InstanceState.parse(request("GET", "/api/app/instances/$instanceId"))
@@ -174,6 +197,11 @@ class CorsClient(
      */
     private fun candidateConnections(urlStr: String): List<() -> HttpURLConnection> {
         val url = URL(urlStr)
+        if (viaTunnel) {
+            TunnelSocksAuth.install()
+            val proxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress(Net.LOCALHOST, Prefs.activeLoopbackSocksPort.toInt()))
+            return listOf { url.openConnection(proxy) as HttpURLConnection }
+        }
         val direct: () -> HttpURLConnection = { url.openConnection() as HttpURLConnection }
         if (!isYandexFunctionProxy || tunnelUp()) return listOf(direct)
 
@@ -330,5 +358,32 @@ data class LoginOut(
             username = o.optString("username"),
             mustChangePassword = o.optBoolean("must_change_password"),
         )
+    }
+}
+
+/**
+ * Supplies the loopback SOCKS5 credentials ([SocksAuth]) to the platform
+ * SOCKS implementation, which asks the default [java.net.Authenticator].
+ * Answers only SOCKS requests for the loopback proxy; everything else gets
+ * no credentials.
+ */
+private object TunnelSocksAuth : java.net.Authenticator() {
+    @Volatile private var installed = false
+
+    fun install() {
+        if (installed) return
+        synchronized(this) {
+            if (!installed) {
+                setDefault(this)
+                installed = true
+            }
+        }
+    }
+
+    override fun getPasswordAuthentication(): java.net.PasswordAuthentication? {
+        val loopback = requestingHost == Net.LOCALHOST ||
+            requestingSite?.isLoopbackAddress == true
+        if (!loopback || requestingProtocol?.startsWith("SOCKS", ignoreCase = true) != true) return null
+        return java.net.PasswordAuthentication(SocksAuth.user, SocksAuth.pass.toCharArray())
     }
 }

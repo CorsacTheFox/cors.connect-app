@@ -37,7 +37,7 @@ import cc.cors.connect.api.InstanceState
  */
 class CorsInstanceController(
     private val context: Context,
-    private val client: CorsClient,
+    private var client: CorsClient,
     private val host: Host,
 ) {
 
@@ -187,10 +187,13 @@ class CorsInstanceController(
      * Reads the latest link relayed via VK (see [cc.cors.connect.api.VkLinkFallback])
      * and hands it to the host exactly like a normal ready output_link. Returns
      * false when VK isn't configured or didn't yield a link, so the caller
-     * falls back to the ordinary network-failure message. There is no
-     * instance/claim bookkeeping here — the backend owns that instance's
-     * lifecycle on its own (see vk_relay.py); this app instance never calls
-     * claim/heartbeat/stop for it.
+     * falls back to the ordinary network-failure message.
+     *
+     * Once connected, the server becomes reachable through the tunnel itself
+     * (it exits server-side), so [adoptRelayedInstance] switches to a
+     * tunnel-routed client, resolves the link to its instance and runs the
+     * ordinary claim + heartbeat flow — otherwise the relay instance dies at
+     * its 5-minute temp TTL.
      */
     private fun tryVkFallback(): Boolean {
         val link = cc.cors.connect.api.VkLinkFallback.fetchLatestLink() ?: return false
@@ -201,7 +204,40 @@ class CorsInstanceController(
                 host.onCorsOutputReady(config)
             }
         }
+        adoptRelayedInstance(link)
         return true
+    }
+
+    /**
+     * Retries the by-link lookup through the tunnel until it comes up (the
+     * lookup only succeeds once the call is actually carrying traffic), then
+     * claims the instance. Blocks the calling background thread.
+     */
+    private fun adoptRelayedInstance(link: String) {
+        val tunnelClient = CorsClient(viaTunnel = true)
+        val deadline = System.currentTimeMillis() + RELAY_ADOPT_TIMEOUT_MS
+        while (!stopped && System.currentTimeMillis() < deadline) {
+            try {
+                val found = tunnelClient.instanceByLink(link)
+                client = tunnelClient
+                currentInstanceId = found.instanceId
+                currentClaimToken = found.claimToken
+                Prefs.corsInstanceId = found.instanceId
+                Prefs.corsClaimToken = found.claimToken.orEmpty()
+                Log.i(TAG, "adoptRelayedInstance: instance ${found.instanceId}, claiming")
+                tryClaim()
+                return
+            } catch (e: CorsException) {
+                // 0 = tunnel not up yet / transient; anything else (404: link
+                // expired or already claimed) is final.
+                if (e.code != 0) {
+                    Log.w(TAG, "adoptRelayedInstance: lookup failed code=${e.code} detail=${e.detail}")
+                    return
+                }
+            }
+            sleep(RELAY_ADOPT_RETRY_MS)
+        }
+        Log.w(TAG, "adoptRelayedInstance: gave up (stopped=$stopped)")
     }
 
     /** Resumes the claim step after Telegram initData has arrived. */
@@ -527,6 +563,11 @@ class CorsInstanceController(
         private const val TAG = "CorsInstanceController"
         private const val POLL_INTERVAL_MS = 1_500L
         private const val MAX_POLL_ATTEMPTS = 80  // ~2 min at 1.5s
+
+        // VK relay adoption: keep retrying the tunnel-routed lookup while the
+        // call connects; the relay instance's temp TTL is 5 min.
+        private const val RELAY_ADOPT_TIMEOUT_MS = 120_000L
+        private const val RELAY_ADOPT_RETRY_MS = 3_000L
 
         // Heartbeat cadence. Backend adds HEARTBEAT_EXT (300s) per beat; pinging
         // every ~120s keeps the deadline comfortably ahead of the wall clock
