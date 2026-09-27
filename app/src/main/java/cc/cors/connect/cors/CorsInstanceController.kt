@@ -234,6 +234,11 @@ class CorsInstanceController(
                     Log.w(TAG, "adoptRelayedInstance: lookup failed code=${e.code} detail=${e.detail}")
                     return
                 }
+            } catch (e: Exception) {
+                // Never let adoption take the app down: the connection itself
+                // is already up, worst case it just keeps its 5-min TTL.
+                Log.e(TAG, "adoptRelayedInstance: unexpected failure", e)
+                return
             }
             sleep(RELAY_ADOPT_RETRY_MS)
         }
