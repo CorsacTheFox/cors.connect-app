@@ -54,6 +54,9 @@ class CorsClient(
         require(baseUrl.isNotBlank()) { "CORS_BASE_URL not set" }
     }
 
+    /** True when requests go through the tunnel's loopback SOCKS ([viaTunnel]). */
+    val routesViaTunnel: Boolean get() = viaTunnel
+
     val isConfigured: Boolean get() = appToken.isNotBlank() && appToken != "REPLACE_WITH_WB_APP_TOKEN"
 
     // ---- endpoints -------------------------------------------------------
@@ -250,6 +253,10 @@ class CorsClient(
             connectTimeout = TIMEOUT_MS
             readTimeout = TIMEOUT_MS
             setRequestProperty("X-App-Token", appToken)
+            // Never pool connections to the loopback SOCKS: an idle keep-alive
+            // socket there keeps the relay from releasing its port on stop,
+            // which sends fullReset into its force-kill / app-restart path.
+            if (viaTunnel) setRequestProperty("Connection", "close")
             // Optional bearer (session token) for authenticated endpoints such
             // as the heartbeat. Empty/null is silently omitted.
             //

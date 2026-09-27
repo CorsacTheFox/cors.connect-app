@@ -532,7 +532,11 @@ class CorsInstanceController(
         // bearer-authenticated client API also works, but the app endpoint is
         // tolerant of either and the token is cleared post-claim anyway.
         val token = currentClaimToken
-        runCatching { client.stop(id, token) }
+        // A tunnel-routed client (VK relay) can't reach the server once the
+        // tunnel is going down, and a request in flight would hold the relay's
+        // SOCKS port open. Skip it: without heartbeats the server times the
+        // instance out on its own.
+        if (!client.routesViaTunnel) runCatching { client.stop(id, token) }
         Prefs.corsInstanceId = 0
         if (!token.isNullOrEmpty()) Prefs.corsClaimToken = ""
     }
