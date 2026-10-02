@@ -13,7 +13,7 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="match_parent"
         android:orientation="vertical"
         android:paddingHorizontal="16dp"
         android:paddingTop="14dp"
@@ -304,10 +304,14 @@
             </LinearLayout>
         </LinearLayout>
 
+        <!-- Connected: the traffic graph takes all spare height so the screen
+             fills the viewport; gone (and weightless) when disconnected. -->
         <bypass.whitelist.ui.SparklineView
             android:id="@+id/routeSpark"
             android:layout_width="match_parent"
-            android:layout_height="36dp"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:minHeight="36dp"
             android:layout_marginTop="8dp"
             android:visibility="gone" />
 
