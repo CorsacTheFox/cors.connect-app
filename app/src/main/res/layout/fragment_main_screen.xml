@@ -141,7 +141,7 @@
             android:baselineAligned="false"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:padding="10dp"
+            android:padding="12dp"
             android:visibility="gone">
 
             <LinearLayout
@@ -415,7 +415,7 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:clickable="true"
                 android:focusable="true"
-                android:paddingHorizontal="4dp"
+                android:paddingStart="4dp"
                 android:paddingVertical="2dp"
                 android:text="@string/main_route_all_servers"
                 android:textColor="@color/accent_emerald"
@@ -428,8 +428,12 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
+        android:fadeScrollbars="false"
         android:overScrollMode="never"
-        android:scrollbars="none">
+        android:scrollbarSize="3dp"
+        android:scrollbarStyle="outsideOverlay"
+        android:scrollbarThumbVertical="@drawable/bg_scroll_thumb"
+        android:scrollbars="vertical">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -455,7 +459,7 @@
                 android:focusable="true"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:padding="13dp"
+                android:padding="12dp"
                 android:visibility="gone">
 
                 <FrameLayout
