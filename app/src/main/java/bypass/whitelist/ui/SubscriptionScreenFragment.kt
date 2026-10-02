@@ -280,8 +280,6 @@ class SubscriptionScreenFragment : Fragment(R.layout.fragment_subscription_scree
         val statusLine = v.findViewById<TextView>(R.id.subStatusLine)
         val title = v.findViewById<TextView>(R.id.subTitle)
         val sub = s.subscription
-        val addServers = v.findViewById<View>(R.id.subAddServers)
-        addServers.visibility = View.GONE
         if (sub == null) {
             statusLine.text = getString(R.string.sub_none)
             statusLine.setTextColor(requireContext().getColor(R.color.ink_3))
@@ -316,11 +314,6 @@ class SubscriptionScreenFragment : Fragment(R.layout.fragment_subscription_scree
             val count = s.devices?.optInt("total", -1) ?: -1
             v.findViewById<TextView>(R.id.subDevices).text =
                 if (count >= 0) "$count/${sub.optInt("device_limit")}" else sub.optInt("device_limit").toString()
-            val url = sub.optString("subscription_url")
-            if (url.isNotBlank() && Prefs.xraySubscriptions.none { subKey(it.url) == subKey(url) }) {
-                addServers.visibility = View.VISIBLE
-                addServers.setOnClickListener { AddXraySubscriptionSheet.show(parentFragmentManager, url) }
-            }
         }
         v.findViewById<TextView>(R.id.subBalance).text = rub(s.balanceKopeks)
     }
@@ -482,9 +475,6 @@ class SubscriptionScreenFragment : Fragment(R.layout.fragment_subscription_scree
             else startTopUp((rubles * 100).toLong())
         }
     }
-
-    /** Last path segment (the panel's short id) — same subscription across sub-page domains. */
-    private fun subKey(url: String) = url.trim().substringBefore('?').trimEnd('/').substringAfterLast('/')
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 

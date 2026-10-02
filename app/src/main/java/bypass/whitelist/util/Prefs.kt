@@ -437,6 +437,11 @@ object Prefs {
         get() = prefs.getString(PrefsKeys.CABINET_REFRESH_TOKEN, "") ?: ""
         set(value) = prefs.edit { putString(PrefsKeys.CABINET_REFRESH_TOKEN, value) }
 
+    /** Newest app-notify feed item already shown (see [bypass.whitelist.notify.PushFeed]). */
+    var pushLastId: Int
+        get() = prefs.getInt(PrefsKeys.PUSH_LAST_ID, 0)
+        set(value) = prefs.edit { putInt(PrefsKeys.PUSH_LAST_ID, value) }
+
     /** OAuth provider whose browser sign-in is in flight (matched on the callback). */
     var cabinetOAuthProvider: String
         get() = prefs.getString(PrefsKeys.CABINET_OAUTH_PROVIDER, "") ?: ""

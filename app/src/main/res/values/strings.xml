@@ -458,4 +458,5 @@
     <string name="sub_device_delete_q">Unlink “%1$s”?</string>
     <string name="sub_logout_q">Sign out?</string>
     <string name="sub_logout_sub">Your subscription and servers stay in the app</string>
+    <string name="push_channel">Announcements</string>
 </resources>

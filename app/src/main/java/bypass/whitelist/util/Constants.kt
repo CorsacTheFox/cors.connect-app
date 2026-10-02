@@ -99,6 +99,7 @@ object PrefsKeys {
     const val CABINET_ACCESS_TOKEN = "cabinet_access_token"
     const val CABINET_REFRESH_TOKEN = "cabinet_refresh_token"
     const val CABINET_OAUTH_PROVIDER = "cabinet_oauth_provider"
+    const val PUSH_LAST_ID = "push_last_id"
     const val CORS_SUBSCRIPTION_LINK = "cors_subscription_link"
     const val CORS_LINK_METHOD = "cors_link_method"
 

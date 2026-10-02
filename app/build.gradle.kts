@@ -141,6 +141,7 @@ dependencies {
     implementation(libs.androidx.viewpager2)
     implementation(libs.androidx.recyclerview)
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
     implementation(libs.zxing.android.embedded)
     testImplementation(libs.junit)
     testImplementation("org.json:json:20240303")

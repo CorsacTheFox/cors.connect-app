@@ -208,17 +208,6 @@
                         android:visibility="gone" />
                 </LinearLayout>
 
-                <!-- Import the cabinet subscription's servers (when missing) -->
-                <TextView
-                    android:id="@+id/subAddServers"
-                    style="@style/QuickChip"
-                    android:layout_width="match_parent"
-                    android:layout_height="34dp"
-                    android:layout_marginTop="8dp"
-                    android:layout_marginEnd="0dp"
-                    android:text="@string/sub_add_servers"
-                    android:visibility="gone" />
-
                 <!-- Renew / buy: period cards, two per row, filled in code -->
                 <TextView
                     android:id="@+id/subBuyLabel"

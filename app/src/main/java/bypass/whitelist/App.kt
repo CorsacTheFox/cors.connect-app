@@ -21,6 +21,7 @@ class App : Application() {
         installCrashLogger()
         bootstrapGoMobile()
         startSubscriptionAutoRefresh()
+        bypass.whitelist.notify.PushFeed.schedule(this)
     }
 
     /**

@@ -463,4 +463,5 @@
     <string name="sub_device_delete_q">Отвязать «%1$s»?</string>
     <string name="sub_logout_q">Выйти из аккаунта?</string>
     <string name="sub_logout_sub">Подписка и серверы в приложении останутся</string>
+    <string name="push_channel">Новости и уведомления</string>
 </resources>
