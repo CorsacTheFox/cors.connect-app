@@ -172,13 +172,11 @@
                 android:id="@+id/routeExchangeRow"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="0dp"
-                            android:baselineAligned="false"
-                android:gravity="center_vertical"
+                android:baselineAligned="false"
                 android:orientation="horizontal"
-            
                 android:visibility="gone">
 
+                <!-- Same 3-column grid as the stats below: device | exit (2 cols) -->
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
@@ -191,27 +189,16 @@
 
                     <TextView
                         android:id="@+id/routeDeviceValue"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="3dp"
-                        android:fontFamily="@font/jetbrains_mono"
-                        android:textColor="@color/ink"
-                        android:textSize="13sp"
+                        style="@style/ConnStatValue"
+                        android:ellipsize="end"
+                        android:maxLines="1"
                         tools:text="LTE" />
                 </LinearLayout>
-
-                <ImageView
-                    android:layout_width="18dp"
-                    android:layout_height="18dp"
-                    android:layout_marginHorizontal="12dp"
-                    android:src="@drawable/ic_chevron_right"
-                    app:tint="@color/accent_emerald" />
 
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:gravity="end"
+                    android:layout_weight="2"
                     android:orientation="vertical">
 
                     <TextView
@@ -220,12 +207,9 @@
 
                     <TextView
                         android:id="@+id/routeExitValue"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="3dp"
-                        android:fontFamily="@font/jetbrains_mono"
-                        android:textColor="@color/ink"
-                        android:textSize="13sp"
+                        style="@style/ConnStatValue"
+                        android:ellipsize="end"
+                        android:maxLines="1"
                         tools:text="185.42.7.19" />
                 </LinearLayout>
             </LinearLayout>
