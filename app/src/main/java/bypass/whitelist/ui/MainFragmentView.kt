@@ -55,14 +55,9 @@ class MainFragmentView(private val root: View) {
     private val routeStatsRow: View = root.findViewById(R.id.routeStatsRow)
     private val routeUptime: TextView = root.findViewById(R.id.routeUptime)
     private val routePing: TextView = root.findViewById(R.id.routePing)
-    private val nodeLoadRow: View = root.findViewById(R.id.nodeLoadRow)
-    private val nodeLoadTotal: TextView = root.findViewById(R.id.nodeLoadTotal)
-    private val nodeLoadBar: android.widget.ProgressBar = root.findViewById(R.id.nodeLoadBar)
-    private val nodeLoadBandwidth: TextView = root.findViewById(R.id.nodeLoadBandwidth)
-    private val nodeLoadCpu: TextView = root.findViewById(R.id.nodeLoadCpu)
-    private val nodeLoadClients: TextView = root.findViewById(R.id.nodeLoadClients)
-    /** Host whose load is on screen / being fetched — drops stale replies after a server switch. */
-    private var nodeLoadHost: String = ""
+    /** Node load per server address (see [refreshNodeLoad]) and the row views showing it. */
+    private val nodeLoads = mutableMapOf<String, NodeLoadClient.NodeLoad>()
+    private val nodeLoadRows = mutableMapOf<String, View>()
     private var nodeLoadInFlight = false
     private val routeLeft: TextView = root.findViewById(R.id.routeLeft)
     private val routeLeftCell: View = root.findViewById(R.id.routeLeftCell)
@@ -266,11 +261,6 @@ class MainFragmentView(private val root: View) {
             if (server != null) {
                 routeCity.text = styledName(server.remark)
                 routeExitValue.text = server.address
-                if (server.address != nodeLoadHost) {
-                    nodeLoadHost = server.address
-                    nodeLoadRow.visibility = View.GONE
-                    refreshNodeLoad()
-                }
             } else {
                 routeCity.text = context.getString(R.string.status_headline_disconnected)
                 routeExitValue.text = "—"
@@ -449,6 +439,7 @@ class MainFragmentView(private val root: View) {
      */
     private fun renderList() {
         callsList.removeAllViews()
+        nodeLoadRows.clear()
         val entries: List<ConnectTarget> = listOf(ConnectTarget.WhitelistBypass) +
             Prefs.savedDestinations.map { ConnectTarget.Instance(it) } +
             currentServers.map { ConnectTarget.Xray(it) }
@@ -564,6 +555,8 @@ class MainFragmentView(private val root: View) {
         pingView.visibility = View.VISIBLE
         pingServers[server.id] = server
         bindPing(pingView, server.id, server.address, server.port)
+        nodeLoadRows[server.address] = row
+        bindRowLoad(row, nodeLoads[server.address])
 
         applyRowActiveState(row, nameView, linkView, protocolView, statusDot, isActive, context)
     }
@@ -740,6 +733,8 @@ class MainFragmentView(private val root: View) {
             statusDot.setBackgroundResource(R.drawable.bg_status_dot_active)
         } else {
             row.setBackgroundResource(R.drawable.bg_destination_card)
+            // Unselected rows sit at 40% so the active one stands out.
+            row.background?.mutate()?.alpha = 102
             statusDot.setBackgroundResource(R.drawable.bg_status_dot_idle)
             nameView.setTextColor(context.getColor(R.color.ink))
             linkView.setTextColor(context.getColor(R.color.ink_3))
@@ -760,55 +755,44 @@ class MainFragmentView(private val root: View) {
         pingButtonDot.setBackgroundResource(R.drawable.bg_status_dot_idle)
     }
 
-    /**
-     * Fetches the active Xray server's node load (see [NodeLoadClient]) and
-     * shows it in the hero. Hidden for Whitelist Bypass, with no server
-     * selected, or when the feed has nothing for this host.
-     */
+    /** Fetches node load for every listed Xray server and updates their rows in place. */
     private fun refreshNodeLoad() {
-        val server = if (Prefs.connectionMode == ConnectionMode.XRAY) Prefs.activeXrayServer else null
-        if (server == null) {
-            nodeLoadHost = ""
-            nodeLoadRow.visibility = View.GONE
-            return
-        }
         if (nodeLoadInFlight) return
+        val hosts = currentServers.map { it.address }
+        if (hosts.isEmpty()) return
         nodeLoadInFlight = true
-        val host = server.address
         thread(isDaemon = true) {
-            val load = NodeLoadClient.fetch(host)
+            val loads = NodeLoadClient.fetchAll(hosts)
             mainHandler.post {
                 nodeLoadInFlight = false
-                if (host == nodeLoadHost || nodeLoadHost.isEmpty()) {
-                    nodeLoadHost = host
-                    bindNodeLoad(load)
-                }
+                nodeLoads.clear()
+                nodeLoads.putAll(loads)
+                for ((host, row) in nodeLoadRows) bindRowLoad(row, nodeLoads[host])
             }
         }
     }
 
-    private fun bindNodeLoad(load: NodeLoadClient.NodeLoad?) {
+    private fun bindRowLoad(row: View, load: NodeLoadClient.NodeLoad?) {
+        val text = row.findViewById<TextView>(R.id.rowLoad)
+        val bar = row.findViewById<android.widget.ProgressBar>(R.id.rowLoadBar)
         if (load == null) {
-            nodeLoadRow.visibility = View.GONE
+            text.visibility = View.GONE
+            bar.visibility = View.GONE
             return
         }
-        val context = root.context
-        val color = context.getColor(
+        val color = row.context.getColor(
             when {
                 load.load >= 85 -> R.color.error_red
                 load.load >= 60 -> R.color.warn_amber
                 else -> R.color.ok_green
             }
         )
-        nodeLoadTotal.text = context.getString(R.string.node_load_percent, load.load)
-        nodeLoadTotal.setTextColor(color)
-        nodeLoadBar.progress = load.load
-        nodeLoadBar.progressTintList = android.content.res.ColorStateList.valueOf(color)
-        nodeLoadBandwidth.text = context.getString(
-            R.string.node_load_bandwidth_value, load.bandwidthLoad, load.rxMBps + load.txMBps
+        text.text = row.context.getString(
+            R.string.node_load_row, load.load, load.rxMBps + load.txMBps, load.cpuLoad, load.clients
         )
-        nodeLoadCpu.text = context.getString(R.string.node_load_percent, load.cpuLoad)
-        nodeLoadClients.text = context.getString(R.string.node_load_clients_value, load.clientsLoad, load.clients)
-        nodeLoadRow.visibility = View.VISIBLE
+        bar.progress = load.load
+        bar.progressTintList = android.content.res.ColorStateList.valueOf(color)
+        text.visibility = View.VISIBLE
+        bar.visibility = View.VISIBLE
     }
 }

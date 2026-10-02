@@ -71,6 +71,29 @@
             android:textAllCaps="true"
             android:textColor="@color/row_ink_34"
             android:textSize="9sp" />
+
+        <!-- Node load (Xray rows, from the panel's node-load feed) -->
+        <TextView
+            android:id="@+id/rowLoad"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:ellipsize="end"
+            android:fontFamily="monospace"
+            android:maxLines="2"
+            android:textColor="@color/ink_3"
+            android:textSize="9sp"
+            android:visibility="gone" />
+
+        <ProgressBar
+            android:id="@+id/rowLoadBar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="2dp"
+            android:layout_marginTop="3dp"
+            android:max="100"
+            android:progressBackgroundTint="@color/hair_strong"
+            android:visibility="gone" />
     </LinearLayout>
 
     <TextView
