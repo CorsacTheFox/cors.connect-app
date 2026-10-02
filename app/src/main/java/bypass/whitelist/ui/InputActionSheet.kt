@@ -9,10 +9,9 @@ import android.widget.TextView
 import androidx.fragment.app.FragmentManager
 import bypass.whitelist.R
 import bypass.whitelist.util.ParamCallback
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.button.MaterialButton
 
-class InputActionSheet : BottomSheetDialogFragment() {
+class InputActionSheet : CenteredSheet() {
 
     private var titleText: String = ""
     private var subtitleText: String? = null

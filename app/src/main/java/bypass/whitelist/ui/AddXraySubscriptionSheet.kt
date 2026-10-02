@@ -22,7 +22,6 @@ import bypass.whitelist.xray.XraySubscription
 import bypass.whitelist.xray.XraySubscriptionException
 import bypass.whitelist.xray.XraySubscriptionManager
 import bypass.whitelist.xray.isSupportedXrayShareLink
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import kotlin.concurrent.thread
 
 /**
@@ -36,7 +35,7 @@ import kotlin.concurrent.thread
  *    base64-decoded, and expanded into many servers — see
  *    [XraySubscriptionManager]).
  */
-class AddXraySubscriptionSheet : BottomSheetDialogFragment() {
+class AddXraySubscriptionSheet : CenteredSheet() {
 
     override fun onCreateView(
         inflater: LayoutInflater,

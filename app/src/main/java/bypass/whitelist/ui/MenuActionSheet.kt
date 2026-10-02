@@ -10,9 +10,8 @@ import android.widget.TextView
 import androidx.fragment.app.FragmentManager
 import bypass.whitelist.R
 import bypass.whitelist.util.ParamCallback
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 
-class MenuActionSheet : BottomSheetDialogFragment() {
+class MenuActionSheet : CenteredSheet() {
 
     data class MenuItem(
         val id: String,

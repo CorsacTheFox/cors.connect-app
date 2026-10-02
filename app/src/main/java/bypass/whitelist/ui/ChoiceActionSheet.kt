@@ -10,9 +10,8 @@ import android.widget.TextView
 import androidx.fragment.app.FragmentManager
 import bypass.whitelist.R
 import bypass.whitelist.util.ParamCallback
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 
-class ChoiceActionSheet : BottomSheetDialogFragment() {
+class ChoiceActionSheet : CenteredSheet() {
 
     data class Option(val id: String, val title: String, val sub: String? = null)
 

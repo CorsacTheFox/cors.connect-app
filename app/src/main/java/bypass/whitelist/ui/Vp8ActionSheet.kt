@@ -7,11 +7,10 @@ import android.view.ViewGroup
 import android.widget.EditText
 import androidx.fragment.app.FragmentManager
 import bypass.whitelist.R
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.materialswitch.MaterialSwitch
 
-class Vp8ActionSheet : BottomSheetDialogFragment() {
+class Vp8ActionSheet : CenteredSheet() {
 
     private var initialFps: Int = 0
     private var initialBatch: Int = 0

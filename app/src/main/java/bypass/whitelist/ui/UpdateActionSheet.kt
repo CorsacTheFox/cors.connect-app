@@ -12,7 +12,6 @@ import bypass.whitelist.BuildConfig
 import bypass.whitelist.R
 import bypass.whitelist.util.AppUpdater
 import bypass.whitelist.util.ApkInstaller
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.button.MaterialButton
 
 /**
@@ -20,7 +19,7 @@ import com.google.android.material.button.MaterialButton
  * open, and offers either an APK download (delegates to [ApkInstaller], which
  * survives this sheet being dismissed) or the releases page in a browser.
  */
-class UpdateActionSheet : BottomSheetDialogFragment() {
+class UpdateActionSheet : CenteredSheet() {
 
     private var release: AppUpdater.Release? = null
 

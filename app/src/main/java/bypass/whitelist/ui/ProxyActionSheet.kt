@@ -14,11 +14,10 @@ import bypass.whitelist.util.Callback
 import bypass.whitelist.util.Net
 import bypass.whitelist.util.Prefs
 import bypass.whitelist.util.SocksAuthMode
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.materialswitch.MaterialSwitch
 
-class ProxyActionSheet : BottomSheetDialogFragment() {
+class ProxyActionSheet : CenteredSheet() {
 
     private var onSaved: Callback? = null
     private var selectedAuth: SocksAuthMode = SocksAuthMode.AUTO

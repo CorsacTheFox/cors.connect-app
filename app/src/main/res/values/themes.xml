@@ -27,6 +27,25 @@
         <item name="fontFamily">@font/onest</item>
     </style>
 
+    <!-- Centred action popups (see CenteredSheet) -->
+    <style name="ThemeOverlay.WhitelistBypass.CenteredDialog" parent="Theme.Material3.Dark.Dialog">
+        <item name="android:windowNoTitle">true</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowAnimationStyle">@style/Animation.WhitelistBypass.CenteredDialog</item>
+        <item name="android:windowSoftInputMode">adjustResize</item>
+        <item name="android:windowMinWidthMajor">0%</item>
+        <item name="android:windowMinWidthMinor">0%</item>
+        <item name="android:fontFamily">@font/onest</item>
+        <item name="fontFamily">@font/onest</item>
+        <item name="colorPrimary">@color/accent_emerald</item>
+    </style>
+
+    <style name="Animation.WhitelistBypass.CenteredDialog" parent="">
+        <item name="android:windowEnterAnimation">@anim/popup_in</item>
+        <item name="android:windowExitAnimation">@anim/popup_out</item>
+    </style>
+
     <style name="ThemeOverlay.WhitelistBypass.BottomSheetDialog" parent="ThemeOverlay.Material3.BottomSheetDialog">
         <item name="bottomSheetStyle">@style/Widget.WhitelistBypass.BottomSheet</item>
         <item name="android:windowAnimationStyle">@style/Animation.Design.BottomSheetDialog</item>

@@ -9,11 +9,10 @@ import androidx.fragment.app.FragmentManager
 import bypass.whitelist.R
 import bypass.whitelist.util.Callback
 import bypass.whitelist.util.Prefs
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.materialswitch.MaterialSwitch
 
-class AutofillActionSheet : BottomSheetDialogFragment() {
+class AutofillActionSheet : CenteredSheet() {
 
     private var onSaved: Callback? = null
 

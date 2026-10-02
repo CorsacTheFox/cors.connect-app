@@ -9,10 +9,9 @@ import android.widget.TextView
 import androidx.fragment.app.FragmentManager
 import bypass.whitelist.R
 import bypass.whitelist.util.Callback
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.button.MaterialButton
 
-class ConfirmActionSheet : BottomSheetDialogFragment() {
+class ConfirmActionSheet : CenteredSheet() {
 
     private var titleText: String = ""
     private var subtitleText: String = ""

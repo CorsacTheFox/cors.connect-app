@@ -12,12 +12,11 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.FragmentManager
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import bypass.whitelist.R
 import bypass.whitelist.tunnel.CallConfig
 import bypass.whitelist.util.Prefs
 
-class AddDestinationSheet : BottomSheetDialogFragment() {
+class AddDestinationSheet : CenteredSheet() {
 
     override fun onCreateView(
         inflater: LayoutInflater,

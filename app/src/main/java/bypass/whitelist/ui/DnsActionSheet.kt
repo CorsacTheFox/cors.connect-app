@@ -13,10 +13,9 @@ import bypass.whitelist.R
 import bypass.whitelist.util.Callback
 import bypass.whitelist.util.DnsMode
 import bypass.whitelist.util.Prefs
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.button.MaterialButton
 
-class DnsActionSheet : BottomSheetDialogFragment() {
+class DnsActionSheet : CenteredSheet() {
 
     private var onSaved: Callback? = null
     private var selectedMode: DnsMode = DnsMode.SYSTEM
