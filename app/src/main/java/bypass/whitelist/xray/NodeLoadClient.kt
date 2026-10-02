@@ -23,8 +23,8 @@ object NodeLoadClient {
         val bandwidthLoad: Int,
         val cpuLoad: Int,
         val clientsLoad: Int,
-        val rxMbit: Double,
-        val txMbit: Double,
+        val rxMBps: Double,
+        val txMBps: Double,
         val clients: Int,
     )
 
@@ -47,8 +47,8 @@ object NodeLoadClient {
                 bandwidthLoad = n.optInt("bandwidthLoad"),
                 cpuLoad = n.optInt("cpuLoad"),
                 clientsLoad = n.optInt("clientsLoad"),
-                rxMbit = n.optDouble("rxMbit", 0.0),
-                txMbit = n.optDouble("txMbit", 0.0),
+                rxMBps = n.optDouble("rxMBps", 0.0),
+                txMBps = n.optDouble("txMBps", 0.0),
                 clients = n.optInt("clients"),
             )
         } catch (_: Exception) {

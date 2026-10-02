@@ -805,7 +805,7 @@ class MainFragmentView(private val root: View) {
         nodeLoadBar.progress = load.load
         nodeLoadBar.progressTintList = android.content.res.ColorStateList.valueOf(color)
         nodeLoadBandwidth.text = context.getString(
-            R.string.node_load_bandwidth_value, load.bandwidthLoad, load.rxMbit + load.txMbit
+            R.string.node_load_bandwidth_value, load.bandwidthLoad, load.rxMBps + load.txMBps
         )
         nodeLoadCpu.text = context.getString(R.string.node_load_percent, load.cpuLoad)
         nodeLoadClients.text = context.getString(R.string.node_load_clients_value, load.clientsLoad, load.clients)

@@ -387,7 +387,7 @@
     <string name="node_load_bandwidth">Channel</string>
     <string name="node_load_cpu">CPU</string>
     <string name="node_load_clients">Clients</string>
-    <string name="node_load_bandwidth_value">%1$d%% · %2$.0f Mbit/s</string>
+    <string name="node_load_bandwidth_value">%1$d%% · %2$.1f MB/s</string>
     <string name="node_load_percent">%1$d%%</string>
     <string name="node_load_clients_value">%1$d%% · %2$d</string>
 </resources>

@@ -392,7 +392,7 @@
     <string name="node_load_bandwidth">Канал</string>
     <string name="node_load_cpu">CPU</string>
     <string name="node_load_clients">Клиенты</string>
-    <string name="node_load_bandwidth_value">%1$d%% · %2$.0f Мбит/с</string>
+    <string name="node_load_bandwidth_value">%1$d%% · %2$.1f МБ/с</string>
     <string name="node_load_percent">%1$d%%</string>
     <string name="node_load_clients_value">%1$d%% · %2$d</string>
 </resources>
