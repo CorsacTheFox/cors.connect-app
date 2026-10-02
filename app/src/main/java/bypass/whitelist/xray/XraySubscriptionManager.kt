@@ -45,7 +45,7 @@ object XraySubscriptionManager {
      * exactly as [cc.cors.connect.api.CorsClient] does for the API. Any other
      * URL — or a non-proxy base URL — is returned unchanged.
      */
-    private fun proxiedSubscriptionUrl(rawUrl: String): String {
+    internal fun proxiedSubscriptionUrl(rawUrl: String): String {
         val proxyBase = Prefs.corsBaseUrl.trim().removeSuffix("/")
         val proxyHost = runCatching { URL(proxyBase).host }.getOrNull() ?: return rawUrl
         if (!proxyHost.equals(YANDEX_FUNCTIONS_HOST, ignoreCase = true)) return rawUrl

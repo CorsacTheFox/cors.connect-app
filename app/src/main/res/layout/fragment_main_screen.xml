@@ -194,6 +194,112 @@
             </LinearLayout>
         </LinearLayout>
 
+        <!-- Node load from the panel's node-load feed (Xray servers only) -->
+        <LinearLayout
+            android:id="@+id/nodeLoadRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_service_row"
+            android:orientation="vertical"
+            android:padding="12dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    style="@style/StatLabel"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:text="@string/node_load_title" />
+
+                <TextView
+                    android:id="@+id/nodeLoadTotal"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:textColor="@color/ink"
+                    android:textSize="15sp"
+                    tools:text="42%" />
+            </LinearLayout>
+
+            <ProgressBar
+                android:id="@+id/nodeLoadBar"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="4dp"
+                android:layout_marginTop="8dp"
+                android:max="100"
+                android:progressBackgroundTint="@color/hair_strong" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:baselineAligned="false"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView style="@style/StatLabel" android:text="@string/node_load_bandwidth" />
+
+                    <TextView
+                        android:id="@+id/nodeLoadBandwidth"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:fontFamily="monospace"
+                        android:textColor="@color/ink_2"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView style="@style/StatLabel" android:text="@string/node_load_cpu" />
+
+                    <TextView
+                        android:id="@+id/nodeLoadCpu"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:fontFamily="monospace"
+                        android:textColor="@color/ink_2"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView style="@style/StatLabel" android:text="@string/node_load_clients" />
+
+                    <TextView
+                        android:id="@+id/nodeLoadClients"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:fontFamily="monospace"
+                        android:textColor="@color/ink_2"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+            </LinearLayout>
+        </LinearLayout>
+
         <!-- Session metrics, compact — all above the connect button (screen 1b) -->
         <LinearLayout
             android:id="@+id/routeStatsRow"

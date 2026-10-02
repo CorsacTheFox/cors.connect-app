@@ -17,6 +17,7 @@ import bypass.whitelist.util.Callback
 import bypass.whitelist.util.ParamCallback
 import bypass.whitelist.util.Prefs
 import bypass.whitelist.xray.XrayEngine
+import bypass.whitelist.xray.NodeLoadClient
 import bypass.whitelist.xray.XrayServer
 import java.io.IOException
 import java.net.InetSocketAddress
@@ -54,6 +55,15 @@ class MainFragmentView(private val root: View) {
     private val routeStatsRow: View = root.findViewById(R.id.routeStatsRow)
     private val routeUptime: TextView = root.findViewById(R.id.routeUptime)
     private val routePing: TextView = root.findViewById(R.id.routePing)
+    private val nodeLoadRow: View = root.findViewById(R.id.nodeLoadRow)
+    private val nodeLoadTotal: TextView = root.findViewById(R.id.nodeLoadTotal)
+    private val nodeLoadBar: android.widget.ProgressBar = root.findViewById(R.id.nodeLoadBar)
+    private val nodeLoadBandwidth: TextView = root.findViewById(R.id.nodeLoadBandwidth)
+    private val nodeLoadCpu: TextView = root.findViewById(R.id.nodeLoadCpu)
+    private val nodeLoadClients: TextView = root.findViewById(R.id.nodeLoadClients)
+    /** Host whose load is on screen / being fetched — drops stale replies after a server switch. */
+    private var nodeLoadHost: String = ""
+    private var nodeLoadInFlight = false
     private val routeLeft: TextView = root.findViewById(R.id.routeLeft)
     private val routeLeftCell: View = root.findViewById(R.id.routeLeftCell)
     private val routeRx: TextView = root.findViewById(R.id.routeRx)
@@ -256,6 +266,11 @@ class MainFragmentView(private val root: View) {
             if (server != null) {
                 routeCity.text = styledName(server.remark)
                 routeExitValue.text = server.address
+                if (server.address != nodeLoadHost) {
+                    nodeLoadHost = server.address
+                    nodeLoadRow.visibility = View.GONE
+                    refreshNodeLoad()
+                }
             } else {
                 routeCity.text = context.getString(R.string.status_headline_disconnected)
                 routeExitValue.text = "—"
@@ -635,6 +650,7 @@ class MainFragmentView(private val root: View) {
     private val pingRefreshRunnable = object : Runnable {
         override fun run() {
             refreshVisiblePings()
+            refreshNodeLoad()
             mainHandler.postDelayed(this, PING_REFRESH_MS)
         }
     }
@@ -647,6 +663,7 @@ class MainFragmentView(private val root: View) {
     fun startPingUpdates() {
         mainHandler.removeCallbacks(pingRefreshRunnable)
         mainHandler.postDelayed(pingRefreshRunnable, PING_REFRESH_MS)
+        refreshNodeLoad()
     }
 
     fun stopPingUpdates() {
@@ -741,5 +758,57 @@ class MainFragmentView(private val root: View) {
         pingButton.clearAnimation()
         pingButtonLabel.text = root.context.getString(R.string.services_run)
         pingButtonDot.setBackgroundResource(R.drawable.bg_status_dot_idle)
+    }
+
+    /**
+     * Fetches the active Xray server's node load (see [NodeLoadClient]) and
+     * shows it in the hero. Hidden for Whitelist Bypass, with no server
+     * selected, or when the feed has nothing for this host.
+     */
+    private fun refreshNodeLoad() {
+        val server = if (Prefs.connectionMode == ConnectionMode.XRAY) Prefs.activeXrayServer else null
+        if (server == null) {
+            nodeLoadHost = ""
+            nodeLoadRow.visibility = View.GONE
+            return
+        }
+        if (nodeLoadInFlight) return
+        nodeLoadInFlight = true
+        val host = server.address
+        thread(isDaemon = true) {
+            val load = NodeLoadClient.fetch(host)
+            mainHandler.post {
+                nodeLoadInFlight = false
+                if (host == nodeLoadHost || nodeLoadHost.isEmpty()) {
+                    nodeLoadHost = host
+                    bindNodeLoad(load)
+                }
+            }
+        }
+    }
+
+    private fun bindNodeLoad(load: NodeLoadClient.NodeLoad?) {
+        if (load == null) {
+            nodeLoadRow.visibility = View.GONE
+            return
+        }
+        val context = root.context
+        val color = context.getColor(
+            when {
+                load.load >= 85 -> R.color.error_red
+                load.load >= 60 -> R.color.warn_amber
+                else -> R.color.ok_green
+            }
+        )
+        nodeLoadTotal.text = context.getString(R.string.node_load_percent, load.load)
+        nodeLoadTotal.setTextColor(color)
+        nodeLoadBar.progress = load.load
+        nodeLoadBar.progressTintList = android.content.res.ColorStateList.valueOf(color)
+        nodeLoadBandwidth.text = context.getString(
+            R.string.node_load_bandwidth_value, load.bandwidthLoad, load.rxMbit + load.txMbit
+        )
+        nodeLoadCpu.text = context.getString(R.string.node_load_percent, load.cpuLoad)
+        nodeLoadClients.text = context.getString(R.string.node_load_clients_value, load.clientsLoad, load.clients)
+        nodeLoadRow.visibility = View.VISIBLE
     }
 }
