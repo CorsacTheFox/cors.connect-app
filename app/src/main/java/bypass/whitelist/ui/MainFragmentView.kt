@@ -4,6 +4,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.view.HapticFeedbackConstants
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -70,6 +71,9 @@ class MainFragmentView(private val root: View) {
     private val authHint: TextView = root.findViewById(R.id.authHint)
     private val authHintBotLink: TextView = root.findViewById(R.id.authHintBotLink)
     private val callsList: LinearLayout = root.findViewById(R.id.callsList)
+    private val connectedCard: View = root.findViewById(R.id.connectedCard)
+    private val connectedServerSlot: android.widget.FrameLayout = root.findViewById(R.id.connectedServerSlot)
+    private var showConnectedCard = false
     private val quickChipTunnel: View = root.findViewById(R.id.quickChipTunnel)
     private val quickChipSplit: View = root.findViewById(R.id.quickChipSplit)
     private val quickChipDns: View = root.findViewById(R.id.quickChipDns)
@@ -216,7 +220,10 @@ class MainFragmentView(private val root: View) {
             routeSpark.visibility = View.VISIBLE
             routePing.text = activePingText()
             statusDetail.visibility = View.GONE
-            routeSectionHeader.visibility = View.VISIBLE
+            // The connected card shows the server — no duplicate list row.
+            routeSectionHeader.visibility = View.GONE
+            showConnectedCard = true
+            connectedCard.visibility = View.VISIBLE
             // Connected: only the service-availability check stays; the
             // ping-all / refresh-subscription pair is hidden.
             serverActionsRow.visibility = View.GONE
@@ -225,6 +232,8 @@ class MainFragmentView(private val root: View) {
             collapsedToActive = true
             renderList()
         } else if (connecting) {
+            showConnectedCard = false
+            connectedCard.visibility = View.GONE
             connectBarLabel.text = context.getString(R.string.hero_cancel)
             routeStatusLine.text = context.getString(
                 if (status == VpnStatus.STOPPING) R.string.status_headline_disconnected
@@ -245,6 +254,8 @@ class MainFragmentView(private val root: View) {
             collapsedToActive = true
             renderList()
         } else {
+            showConnectedCard = false
+            connectedCard.visibility = View.GONE
             connectBarLabel.text = context.getString(R.string.hero_connect)
             routeStatusLine.text = context.getString(R.string.status_headline_disconnected)
             routeStatusLine.setShadowLayer(0f, 0f, 0f, 0)
@@ -456,6 +467,7 @@ class MainFragmentView(private val root: View) {
     private fun renderList() {
         callsList.removeAllViews()
         nodeLoadRows.clear()
+        connectedServerSlot.removeAllViews()
         val entries: List<ConnectTarget> = listOf(ConnectTarget.WhitelistBypass) +
             Prefs.savedDestinations.map { ConnectTarget.Instance(it) } +
             currentServers.map { ConnectTarget.Xray(it) }
@@ -467,8 +479,10 @@ class MainFragmentView(private val root: View) {
         emptyCta.visibility = View.GONE
         callsList.visibility = View.VISIBLE
         val inflater = LayoutInflater.from(root.context)
+        callsList.visibility = if (showConnectedCard) View.GONE else View.VISIBLE
         visibleEntries.forEach { target ->
-            val row = inflater.inflate(R.layout.item_call_row, callsList, false)
+            val inCard = showConnectedCard
+            val row = inflater.inflate(R.layout.item_call_row, if (inCard) connectedServerSlot else callsList, false)
             row.clipToOutline = true
             when (target) {
                 is ConnectTarget.WhitelistBypass -> bindWhitelistBypassRow(row, isActive = isActiveEntry(target))
@@ -479,6 +493,14 @@ class MainFragmentView(private val root: View) {
             row.setOnLongClickListener {
                 onEntryLongPressed?.invoke(target)
                 true
+            }
+            if (inCard) {
+                // Header of the connected card: no own frame, flush with the card.
+                row.background = null
+                row.setPadding(0, row.paddingTop, 0, row.paddingBottom)
+                (row.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin = 0
+                connectedServerSlot.addView(row)
+                return@forEach
             }
             callsList.addView(row)
         }

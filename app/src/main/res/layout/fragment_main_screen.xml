@@ -131,181 +131,6 @@
             android:textColor="@color/ink_3"
             android:textSize="11sp" />
 
-        <!-- device -> exit exchange -->
-        <LinearLayout
-            android:id="@+id/routeExchangeRow"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:background="@drawable/bg_service_row"
-            android:baselineAligned="false"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:padding="12dp"
-            android:visibility="gone">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    style="@style/StatLabel"
-                    android:text="@string/main_route_device" />
-
-                <TextView
-                    android:id="@+id/routeDeviceValue"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="3dp"
-                    android:fontFamily="@font/jetbrains_mono"
-                    android:textColor="@color/ink"
-                    android:textSize="13sp"
-                    tools:text="LTE" />
-            </LinearLayout>
-
-            <ImageView
-                android:layout_width="18dp"
-                android:layout_height="18dp"
-                android:layout_marginHorizontal="12dp"
-                android:src="@drawable/ic_chevron_right"
-                app:tint="@color/accent_emerald" />
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:gravity="end"
-                android:orientation="vertical">
-
-                <TextView
-                    style="@style/StatLabel"
-                    android:text="@string/main_route_exit" />
-
-                <TextView
-                    android:id="@+id/routeExitValue"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="3dp"
-                    android:fontFamily="@font/jetbrains_mono"
-                    android:textColor="@color/ink"
-                    android:textSize="13sp"
-                    tools:text="185.42.7.19" />
-            </LinearLayout>
-        </LinearLayout>
-
-        <!-- Session metrics, compact — all above the connect button (screen 1b) -->
-        <LinearLayout
-            android:id="@+id/routeStatsRow"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:orientation="vertical"
-            android:visibility="gone">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:baselineAligned="false"
-                android:orientation="horizontal">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView style="@style/StatLabel" android:text="@string/stat_uptime" />
-
-                    <TextView
-                        android:id="@+id/routeUptime"
-                        style="@style/RouteStatValue"
-                        tools:text="00:14:08" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView style="@style/StatLabel" android:text="@string/stat_ping" />
-
-                    <TextView
-                        android:id="@+id/routePing"
-                        style="@style/RouteStatValue"
-                        tools:text="38 мс" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:id="@+id/routeLeftCell"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView style="@style/StatLabel" android:text="@string/stat_days_left" />
-
-                    <TextView
-                        android:id="@+id/routeLeft"
-                        style="@style/RouteStatValue"
-                        tools:text="14" />
-                </LinearLayout>
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:baselineAligned="false"
-                android:orientation="horizontal">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView style="@style/StatLabel" android:text="@string/stat_rx" />
-
-                    <TextView
-                        android:id="@+id/routeRx"
-                        style="@style/RouteStatValue"
-                        tools:text="4.2 МБ/с" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView style="@style/StatLabel" android:text="@string/stat_tx" />
-
-                    <TextView
-                        android:id="@+id/routeTx"
-                        style="@style/RouteStatValue"
-                        tools:text="0.8 МБ/с" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:id="@+id/routeUsedCell"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView style="@style/StatLabel" android:text="@string/stat_traffic" />
-
-                    <TextView
-                        android:id="@+id/routeUsed"
-                        style="@style/RouteStatValue"
-                        tools:text="12.4 GB" />
-                </LinearLayout>
-            </LinearLayout>
-        </LinearLayout>
-
         <!-- Connected: the traffic graph takes all spare height so the screen
              fills the viewport; gone (and weightless) when disconnected. -->
         <bypass.whitelist.ui.SparklineView
@@ -316,6 +141,206 @@
             android:minHeight="36dp"
             android:layout_marginTop="8dp"
             android:visibility="gone" />
+
+        <!-- Connected: one card in the active-server style — the server row on
+             top, session stats and the device → exit route below. -->
+        <LinearLayout
+            android:id="@+id/connectedCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_destination_card_active"
+            android:orientation="vertical"
+            android:paddingHorizontal="12dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="12dp"
+            android:visibility="gone">
+
+            <FrameLayout
+                android:id="@+id/connectedServerSlot"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginBottom="10dp"
+                android:background="@color/hair" />
+
+            <!-- device -> exit exchange -->
+            <LinearLayout
+                android:id="@+id/routeExchangeRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="0dp"
+                            android:baselineAligned="false"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+            
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        style="@style/StatLabel"
+                        android:text="@string/main_route_device" />
+
+                    <TextView
+                        android:id="@+id/routeDeviceValue"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:fontFamily="@font/jetbrains_mono"
+                        android:textColor="@color/ink"
+                        android:textSize="13sp"
+                        tools:text="LTE" />
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_marginHorizontal="12dp"
+                    android:src="@drawable/ic_chevron_right"
+                    app:tint="@color/accent_emerald" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="end"
+                    android:orientation="vertical">
+
+                    <TextView
+                        style="@style/StatLabel"
+                        android:text="@string/main_route_exit" />
+
+                    <TextView
+                        android:id="@+id/routeExitValue"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:fontFamily="@font/jetbrains_mono"
+                        android:textColor="@color/ink"
+                        android:textSize="13sp"
+                        tools:text="185.42.7.19" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Session metrics, compact — all above the connect button (screen 1b) -->
+            <LinearLayout
+                android:id="@+id/routeStatsRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:baselineAligned="false"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView style="@style/StatLabel" android:text="@string/stat_uptime" />
+
+                        <TextView
+                            android:id="@+id/routeUptime"
+                            style="@style/ConnStatValue"
+                            tools:text="00:14:08" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView style="@style/StatLabel" android:text="@string/stat_ping" />
+
+                        <TextView
+                            android:id="@+id/routePing"
+                            style="@style/ConnStatValue"
+                            tools:text="38 мс" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/routeLeftCell"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView style="@style/StatLabel" android:text="@string/stat_days_left" />
+
+                        <TextView
+                            android:id="@+id/routeLeft"
+                            style="@style/ConnStatValue"
+                            tools:text="14" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:baselineAligned="false"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView style="@style/StatLabel" android:text="@string/stat_rx" />
+
+                        <TextView
+                            android:id="@+id/routeRx"
+                            style="@style/ConnStatValue"
+                            tools:text="4.2 МБ/с" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView style="@style/StatLabel" android:text="@string/stat_tx" />
+
+                        <TextView
+                            android:id="@+id/routeTx"
+                            style="@style/ConnStatValue"
+                            tools:text="0.8 МБ/с" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/routeUsedCell"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView style="@style/StatLabel" android:text="@string/stat_traffic" />
+
+                        <TextView
+                            android:id="@+id/routeUsed"
+                            style="@style/ConnStatValue"
+                            tools:text="12.4 GB" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
 
         <!-- Route section header (connected / connecting only) -->
         <LinearLayout

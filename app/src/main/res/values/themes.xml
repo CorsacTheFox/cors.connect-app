@@ -139,6 +139,17 @@
     </style>
 
     <!-- Compact session-metric value above the connect button (screen 1b). -->
+    <!-- Connected-card stat values: UI face, not mono -->
+    <style name="ConnStatValue">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">2dp</item>
+        <item name="android:fontFamily">@font/onest</item>
+        <item name="android:textColor">@color/ink</item>
+        <item name="android:textFontWeight">500</item>
+        <item name="android:textSize">15sp</item>
+    </style>
+
     <style name="RouteStatValue">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
