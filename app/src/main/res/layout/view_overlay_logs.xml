@@ -22,7 +22,7 @@
             android:id="@+id/overlayLogsText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:fontFamily="monospace"
+            android:fontFamily="@font/jetbrains_mono"
             android:lineSpacingExtra="1dp"
             android:textColor="@color/ink_2"
             android:textIsSelectable="true"

@@ -41,7 +41,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:layout_marginBottom="6dp"
-            android:fontFamily="monospace"
+            android:fontFamily="@font/jetbrains_mono"
             android:letterSpacing="0.16"
             android:textAllCaps="true"
             android:textColor="@color/ink_3"

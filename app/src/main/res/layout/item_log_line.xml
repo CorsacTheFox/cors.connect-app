@@ -34,7 +34,7 @@
             android:id="@+id/lineMessage"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:fontFamily="monospace"
+            android:fontFamily="@font/jetbrains_mono"
             android:lineSpacingExtra="1dp"
             android:textColor="@color/ink"
             android:textIsSelectable="true"
@@ -51,7 +51,7 @@
                 android:id="@+id/lineTime"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:fontFamily="monospace"
+                android:fontFamily="@font/jetbrains_mono"
                 android:textColor="@color/ink_3"
                 android:textSize="10sp" />
 
@@ -61,7 +61,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
                 android:background="@drawable/bg_log_comp_chip"
-                android:fontFamily="monospace"
+                android:fontFamily="@font/jetbrains_mono"
                 android:letterSpacing="0.16"
                 android:paddingHorizontal="6dp"
                 android:paddingVertical="1dp"

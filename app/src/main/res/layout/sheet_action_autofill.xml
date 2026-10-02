@@ -64,7 +64,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
-                    android:fontFamily="monospace"
+                    android:fontFamily="@font/jetbrains_mono"
                     android:text="@string/autofill_enable_sub"
                     android:textColor="@color/ink_3"
                     android:textSize="11sp" />
@@ -84,7 +84,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
             android:layout_marginBottom="6dp"
-            android:fontFamily="monospace"
+            android:fontFamily="@font/jetbrains_mono"
             android:letterSpacing="0.16"
             android:textAllCaps="true"
             android:text="@string/autofill_name_field_label"

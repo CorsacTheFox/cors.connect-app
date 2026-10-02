@@ -231,14 +231,14 @@ class SubscriptionScreenFragment : Fragment(R.layout.fragment_subscription_scree
             left.addView(TextView(ctx).apply {
                 val seen = runCatching { outFmt.format(inFmt.parse(d.getString("created_at").take(19))!!) }.getOrDefault("")
                 text = listOf(d.optString("platform"), seen).filter { it.isNotBlank() }.joinToString(" · ")
-                typeface = android.graphics.Typeface.MONOSPACE
+                typeface = Fonts.mono(context)
                 setTextColor(ctx.getColor(R.color.ink_3))
                 textSize = 10f
             })
             row.addView(left, LinearLayout.LayoutParams(0, -2, 1f))
             row.addView(TextView(ctx).apply {
                 text = if (isThis) getString(R.string.sub_device_this) else "⋯"
-                typeface = android.graphics.Typeface.MONOSPACE
+                typeface = Fonts.mono(context)
                 setTextColor(ctx.getColor(if (isThis) R.color.accent_emerald else R.color.ink_3))
                 textSize = if (isThis) 10f else 14f
                 setPadding(dp(8), 0, 0, 0)
@@ -393,13 +393,13 @@ class SubscriptionScreenFragment : Fragment(R.layout.fragment_subscription_scree
         val priceRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
         priceRow.addView(TextView(ctx).apply {
             text = o.price
-            typeface = android.graphics.Typeface.MONOSPACE
+            typeface = Fonts.mono(context)
             setTextColor(ctx.getColor(R.color.accent_emerald))
             textSize = 15f
         })
         if (o.badge != null) priceRow.addView(TextView(ctx).apply {
             text = o.badge
-            typeface = android.graphics.Typeface.MONOSPACE
+            typeface = Fonts.mono(context)
             setTextColor(ctx.getColor(R.color.ok_green))
             textSize = 10f
             setPadding(dp(8), 0, 0, 0)
@@ -445,14 +445,14 @@ class SubscriptionScreenFragment : Fragment(R.layout.fragment_subscription_scree
             left.addView(TextView(ctx).apply {
                 val date = runCatching { outFmt.format(inFmt.parse(t.getString("created_at").take(19))!!) }.getOrDefault("")
                 text = if (t.optBoolean("is_completed", true)) date else "$date · ${getString(R.string.sub_history_pending)}"
-                typeface = android.graphics.Typeface.MONOSPACE
+                typeface = Fonts.mono(context)
                 setTextColor(ctx.getColor(R.color.ink_3))
                 textSize = 10f
             })
             row.addView(left, LinearLayout.LayoutParams(0, -2, 1f))
             row.addView(TextView(ctx).apply {
                 text = "+" + rub(t.optLong("amount_kopeks"))
-                typeface = android.graphics.Typeface.MONOSPACE
+                typeface = Fonts.mono(context)
                 setTextColor(ctx.getColor(if (t.optBoolean("is_completed", true)) R.color.ok_green else R.color.ink_3))
                 textSize = 13f
                 setPadding(dp(8), 0, 0, 0)

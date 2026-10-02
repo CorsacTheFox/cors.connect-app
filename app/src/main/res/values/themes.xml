@@ -23,8 +23,8 @@
         <item name="colorError">@color/error_red</item>
         <item name="bottomSheetDialogTheme">@style/ThemeOverlay.WhitelistBypass.BottomSheetDialog</item>
         <!-- Nocturne redesign: Inter everywhere except the explicit mono labels. -->
-        <item name="android:fontFamily">@font/inter</item>
-        <item name="fontFamily">@font/inter</item>
+        <item name="android:fontFamily">@font/onest</item>
+        <item name="fontFamily">@font/onest</item>
     </style>
 
     <style name="ThemeOverlay.WhitelistBypass.BottomSheetDialog" parent="ThemeOverlay.Material3.BottomSheetDialog">
@@ -50,7 +50,7 @@
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginBottom">6dp</item>
-        <item name="android:fontFamily">monospace</item>
+        <item name="android:fontFamily">@font/jetbrains_mono</item>
         <item name="android:letterSpacing">0.16</item>
         <item name="android:textAllCaps">true</item>
         <item name="android:textColor">@color/ink_3</item>
@@ -61,7 +61,7 @@
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:background">@drawable/bg_input</item>
-        <item name="android:fontFamily">monospace</item>
+        <item name="android:fontFamily">@font/jetbrains_mono</item>
         <item name="android:padding">12dp</item>
         <item name="android:textColor">@color/ink</item>
         <item name="android:textColorHint">@color/ink_3</item>
@@ -91,7 +91,7 @@
     <style name="StatLabel">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:fontFamily">monospace</item>
+        <item name="android:fontFamily">@font/jetbrains_mono</item>
         <item name="android:letterSpacing">0.1</item>
         <item name="android:textAllCaps">true</item>
         <item name="android:textColor">@color/ink_3</item>
@@ -102,7 +102,7 @@
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">2dp</item>
-        <item name="android:fontFamily">monospace</item>
+        <item name="android:fontFamily">@font/jetbrains_mono</item>
         <item name="android:textColor">@color/ink</item>
         <item name="android:textSize">15sp</item>
         <item name="android:textStyle">bold</item>
@@ -113,7 +113,7 @@
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">4dp</item>
-        <item name="android:fontFamily">monospace</item>
+        <item name="android:fontFamily">@font/jetbrains_mono</item>
         <item name="android:textColor">@color/ink</item>
         <item name="android:textSize">17sp</item>
     </style>

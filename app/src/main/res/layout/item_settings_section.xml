@@ -9,7 +9,7 @@
         android:id="@+id/sectionLabel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:fontFamily="monospace"
+        android:fontFamily="@font/jetbrains_mono"
         android:letterSpacing="0.18"
         android:paddingHorizontal="8dp"
         android:paddingBottom="8dp"

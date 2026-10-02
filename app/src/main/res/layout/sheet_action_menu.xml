@@ -35,7 +35,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
             android:ellipsize="end"
-            android:fontFamily="monospace"
+            android:fontFamily="@font/jetbrains_mono"
             android:maxLines="1"
             android:textColor="@color/ink_3"
             android:textSize="11sp"

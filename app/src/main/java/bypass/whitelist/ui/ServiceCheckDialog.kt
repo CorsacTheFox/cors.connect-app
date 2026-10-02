@@ -164,7 +164,7 @@ class ServiceCheckDialog : DialogFragment(R.layout.dialog_service_check) {
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             text = result.name
             textSize = 12f
-            typeface = android.graphics.Typeface.MONOSPACE
+            typeface = Fonts.mono(context)
             setTextColor(context.getColor(R.color.ink))
         }
         val status = TextView(context).apply {
@@ -178,7 +178,7 @@ class ServiceCheckDialog : DialogFragment(R.layout.dialog_service_check) {
                 context.getString(R.string.services_fail)
             }
             textSize = 12f
-            typeface = android.graphics.Typeface.MONOSPACE
+            typeface = Fonts.mono(context)
             setTextColor(context.getColor(if (result.ok) R.color.ink_2 else R.color.error_red))
         }
         row.addView(dot)
@@ -214,7 +214,7 @@ class ServiceCheckDialog : DialogFragment(R.layout.dialog_service_check) {
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             text = name
             textSize = 12f
-            typeface = android.graphics.Typeface.MONOSPACE
+            typeface = Fonts.mono(context)
             setTextColor(context.getColor(R.color.ink_3))
         }
         val ellipsis = TextView(context).apply {
@@ -224,7 +224,7 @@ class ServiceCheckDialog : DialogFragment(R.layout.dialog_service_check) {
             )
             text = "…"
             textSize = 12f
-            typeface = android.graphics.Typeface.MONOSPACE
+            typeface = Fonts.mono(context)
             setTextColor(context.getColor(R.color.ink_3))
         }
         row.addView(dot)

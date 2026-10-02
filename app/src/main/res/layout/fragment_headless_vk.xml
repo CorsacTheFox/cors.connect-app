@@ -44,7 +44,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:fontFamily="monospace"
+                android:fontFamily="@font/jetbrains_mono"
                 android:text="@string/captcha_pill_label"
                 android:textColor="@color/warn_amber"
                 android:textSize="11sp" />

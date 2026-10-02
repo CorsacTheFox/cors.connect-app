@@ -33,7 +33,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:fontFamily="monospace"
+            android:fontFamily="@font/jetbrains_mono"
             android:textColor="@color/ink_2"
             android:textSize="12sp"
             android:text="@string/update_checking" />
@@ -44,7 +44,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
             android:background="@drawable/bg_input"
-            android:fontFamily="monospace"
+            android:fontFamily="@font/jetbrains_mono"
             android:minHeight="48dp"
             android:padding="12dp"
             android:textColor="@color/ink_2"

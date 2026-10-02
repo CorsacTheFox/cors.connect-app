@@ -11,7 +11,7 @@
         android:layout_height="22dp"
         android:layout_marginTop="1dp"
         android:background="@drawable/bg_ob_step_num"
-        android:fontFamily="monospace"
+        android:fontFamily="@font/jetbrains_mono"
         android:gravity="center"
         android:textColor="@color/accent_emerald"
         android:textSize="10.5sp" />

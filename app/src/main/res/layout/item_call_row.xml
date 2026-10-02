@@ -54,7 +54,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
             android:ellipsize="end"
-            android:fontFamily="monospace"
+            android:fontFamily="@font/jetbrains_mono"
             android:maxLines="1"
             android:textColor="@color/ink_3"
             android:textSize="10sp" />
@@ -65,7 +65,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
             android:ellipsize="end"
-            android:fontFamily="monospace"
+            android:fontFamily="@font/jetbrains_mono"
             android:letterSpacing="0.08"
             android:maxLines="1"
             android:textAllCaps="true"
@@ -86,7 +86,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="8dp"
-                android:fontFamily="monospace"
+                android:fontFamily="@font/jetbrains_mono"
                 android:text="@string/node_load_label"
                 android:textColor="@color/ink_3"
                 android:textSize="9sp" />
@@ -106,7 +106,7 @@
                 android:gravity="end"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
-                android:fontFamily="monospace"
+                android:fontFamily="@font/jetbrains_mono"
                 android:textColor="@color/ink_3"
                 android:textSize="9sp" />
         </LinearLayout>
@@ -117,7 +117,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="8dp"
-        android:fontFamily="monospace"
+        android:fontFamily="@font/jetbrains_mono"
         android:letterSpacing="0.06"
         android:textColor="@color/ink_3"
         android:textSize="10sp" />

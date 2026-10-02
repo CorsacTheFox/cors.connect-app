@@ -56,7 +56,7 @@ class SparklineView @JvmOverloads constructor(
     private val label = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = ink3
         textSize = dp(9.5f)
-        typeface = Typeface.MONOSPACE
+        typeface = Fonts.mono(context)
     }
     private val path = Path()
 
