@@ -345,41 +345,51 @@
         </LinearLayout>
 
         <!-- Quick chips -->
-        <HorizontalScrollView
+        <LinearLayout
+            android:id="@+id/quickChips"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="18dp"
-            android:overScrollMode="never"
-            android:scrollbars="none">
+            android:orientation="horizontal">
 
-            <LinearLayout
-                android:id="@+id/quickChips"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
+            <TextView
+                android:id="@+id/quickChipSplit"
+                style="@style/QuickChip"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:layout_weight="1"
+                android:text="@string/settings_row_split" />
 
-                <TextView
-                    android:id="@+id/quickChipSplit"
-                    style="@style/QuickChip"
-                    android:text="@string/settings_row_split" />
+            <TextView
+                android:id="@+id/quickChipBot"
+                style="@style/QuickChip"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="0dp"
+                android:text="@string/main_chip_subscription" />
 
-                <TextView
-                    android:id="@+id/quickChipTunnel"
-                    style="@style/QuickChip"
-                    android:text="@string/settings_row_tunnel_mode" />
+            <!-- Kept for MainFragmentView bindings; not shown on the main screen. -->
+            <TextView
+                android:id="@+id/quickChipTunnel"
+                style="@style/QuickChip"
+                android:text="@string/settings_row_tunnel_mode"
+                android:visibility="gone" />
 
-                <TextView
-                    android:id="@+id/quickChipBot"
-                    style="@style/QuickChip"
-                    android:text="@string/main_chip_subscription" />
-
-                <TextView
-                    android:id="@+id/quickChipDns"
-                    style="@style/QuickChip"
-                    android:text="@string/settings_row_dns"
-                    android:visibility="gone" />
-            </LinearLayout>
-        </HorizontalScrollView>
+            <TextView
+                android:id="@+id/quickChipDns"
+                style="@style/QuickChip"
+                android:text="@string/settings_row_dns"
+                android:visibility="gone" />
+        </LinearLayout>
 
         <!-- Route section header -->
         <LinearLayout

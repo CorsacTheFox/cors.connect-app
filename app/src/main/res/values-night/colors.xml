@@ -13,8 +13,9 @@
     <color name="ink">#FFE9E9ED</color>
     <color name="ink_2">#FFB2B6CA</color>
     <color name="ink_3">#FF75798C</color>
-    <color name="hair">#24B485F5</color>
-    <color name="hair_strong">#3DB485F5</color>
+    <color name="accent_border">#73B485F5</color>
+    <color name="hair">#1AB485F5</color>
+    <color name="hair_strong">#29B485F5</color>
 
     <color name="panel_bg">#FF15161F</color>
     <color name="panel_2">#FF171922</color>
