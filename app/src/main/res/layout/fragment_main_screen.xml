@@ -176,7 +176,7 @@
                 android:orientation="horizontal"
                 android:visibility="gone">
 
-                <!-- Same 3-column grid as the stats below: device | exit (2 cols) -->
+                <!-- Same 3-column grid as the stats below: device | → | exit -->
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
@@ -195,10 +195,24 @@
                         tools:text="LTE" />
                 </LinearLayout>
 
+                <!-- Middle column: arrow device → exit -->
+                <FrameLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1">
+
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_chevron_right"
+                        app:tint="@color/accent_emerald" />
+                </FrameLayout>
+
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_weight="2"
+                    android:layout_weight="1"
                     android:orientation="vertical">
 
                     <TextView
