@@ -320,8 +320,79 @@
                 android:layout_marginTop="8dp"
                 android:visibility="gone" />
 
-            <!-- Route section header -->
+            <!-- Ping / refresh actions -->
             <LinearLayout
+                android:id="@+id/serverActionsRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:layout_marginBottom="8dp"
+                android:baselineAligned="false"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:id="@+id/pingAllButton"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_ping_button"
+                    android:clickable="true"
+                    android:contentDescription="@string/ping_check_button"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:id="@+id/pingAllIcon"
+                        android:layout_width="15dp"
+                        android:layout_height="15dp"
+                        android:layout_marginEnd="8dp"
+                        android:src="@drawable/ic_radar"
+                        app:tint="@color/ink" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/ping_button"
+                        android:textColor="@color/ink"
+                        android:textSize="12.5sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/refreshSubsButton"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_ping_button"
+                    android:clickable="true"
+                    android:contentDescription="@string/xray_refresh_button"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:id="@+id/refreshSubsIcon"
+                        android:layout_width="15dp"
+                        android:layout_height="15dp"
+                        android:layout_marginEnd="8dp"
+                        android:src="@drawable/ic_setting_update"
+                        app:tint="@color/ink" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/refresh_subscriptions_button"
+                        android:textColor="@color/ink"
+                        android:textSize="12.5sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Service reachability check -->
+
+            <!-- Route section header (connected / connecting only) -->
+            <LinearLayout
+                android:id="@+id/routeSectionHeader"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
@@ -417,74 +488,6 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- Ping / refresh actions -->
-            <LinearLayout
-                android:id="@+id/serverActionsRow"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:baselineAligned="false"
-                android:orientation="horizontal">
-
-                <LinearLayout
-                    android:id="@+id/pingAllButton"
-                    android:layout_width="0dp"
-                    android:layout_height="36dp"
-                    android:layout_weight="1"
-                    android:background="@drawable/bg_ping_button"
-                    android:clickable="true"
-                    android:contentDescription="@string/ping_check_button"
-                    android:focusable="true"
-                    android:gravity="center"
-                    android:orientation="horizontal">
-
-                    <ImageView
-                        android:id="@+id/pingAllIcon"
-                        android:layout_width="15dp"
-                        android:layout_height="15dp"
-                        android:layout_marginEnd="8dp"
-                        android:src="@drawable/ic_radar"
-                        app:tint="@color/ink" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/ping_button"
-                        android:textColor="@color/ink"
-                        android:textSize="12.5sp" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:id="@+id/refreshSubsButton"
-                    android:layout_width="0dp"
-                    android:layout_height="36dp"
-                    android:layout_marginStart="8dp"
-                    android:layout_weight="1"
-                    android:background="@drawable/bg_ping_button"
-                    android:clickable="true"
-                    android:contentDescription="@string/xray_refresh_button"
-                    android:focusable="true"
-                    android:gravity="center"
-                    android:orientation="horizontal">
-
-                    <ImageView
-                        android:id="@+id/refreshSubsIcon"
-                        android:layout_width="15dp"
-                        android:layout_height="15dp"
-                        android:layout_marginEnd="8dp"
-                        android:src="@drawable/ic_setting_update"
-                        app:tint="@color/ink" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/refresh_subscriptions_button"
-                        android:textColor="@color/ink"
-                        android:textSize="12.5sp" />
-                </LinearLayout>
-            </LinearLayout>
-
-            <!-- Service reachability check -->
             <LinearLayout
                 android:id="@+id/pingRow"
                 android:layout_width="match_parent"

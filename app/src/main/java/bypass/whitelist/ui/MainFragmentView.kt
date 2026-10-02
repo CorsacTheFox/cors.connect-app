@@ -81,6 +81,7 @@ class MainFragmentView(private val root: View) {
     private val pingButtonLabel: TextView = root.findViewById(R.id.pingButtonLabel)
     private val pingButtonDot: View = root.findViewById(R.id.pingButtonDot)
     private val routeAllServers: View = root.findViewById(R.id.routeAllServers)
+    private val routeSectionHeader: View = root.findViewById(R.id.routeSectionHeader)
 
     var onAddCallClicked: Callback? = null
     var onScanQrClicked: Callback? = null
@@ -205,6 +206,7 @@ class MainFragmentView(private val root: View) {
             routeSpark.visibility = View.VISIBLE
             routePing.text = activePingText()
             statusDetail.visibility = View.GONE
+            routeSectionHeader.visibility = View.VISIBLE
             // Connected: only the service-availability check stays; the
             // ping-all / refresh-subscription pair is hidden.
             serverActionsRow.visibility = View.GONE
@@ -225,6 +227,7 @@ class MainFragmentView(private val root: View) {
             routeSpark.visibility = View.GONE
             routeSpark.reset()
             statusDetail.visibility = View.VISIBLE
+            routeSectionHeader.visibility = View.VISIBLE
             serverActionsRow.visibility = View.GONE
             pingRow.visibility = View.GONE
             authHint.visibility = View.GONE
@@ -240,8 +243,11 @@ class MainFragmentView(private val root: View) {
             routeStatsRow.visibility = View.GONE
             routeSpark.visibility = View.GONE
             routeSpark.reset()
-            statusDetail.visibility = View.VISIBLE
+            // Ping / refresh take the place of the "pick a connection" hint
+            // and the section header.
             statusDetail.text = disconnectedDetailText()
+            statusDetail.visibility = View.GONE
+            routeSectionHeader.visibility = View.GONE
             serverActionsRow.visibility = View.VISIBLE
             pingRow.visibility = View.GONE
             authHint.visibility = View.GONE
