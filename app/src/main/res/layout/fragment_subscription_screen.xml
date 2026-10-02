@@ -138,75 +138,85 @@
                 android:orientation="vertical"
                 android:visibility="gone">
 
-                <!-- Stats card: traffic / devices / balance -->
+                <!-- Stats: traffic / devices / balance — three equal cards -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"
-                    android:background="@drawable/bg_stats_card"
-                    android:orientation="vertical"
-                    android:padding="12dp">
+                    android:baselineAligned="false"
+                    android:orientation="horizontal">
 
                     <LinearLayout
-                        android:layout_width="match_parent"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:baselineAligned="false"
-                        android:orientation="horizontal">
+                        android:layout_weight="1"
+                        android:layout_marginEnd="4dp"
+                        android:background="@drawable/bg_stats_card_soft"
+                        android:gravity="center_horizontal"
+                        android:orientation="vertical"
+                        android:paddingHorizontal="8dp"
+                        android:paddingVertical="10dp">
 
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
+                        <TextView style="@style/StatLabel" android:text="@string/sub_traffic" />
 
-                            <TextView style="@style/StatLabel" android:text="@string/sub_traffic" />
-
-                            <TextView
-                                android:id="@+id/subTraffic"
-                                style="@style/RouteStatValue"
-                                tools:text="3,5 / ∞ GB" />
-                        </LinearLayout>
-
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
-
-                            <TextView style="@style/StatLabel" android:text="@string/sub_devices" />
-
-                            <TextView
-                                android:id="@+id/subDevices"
-                                style="@style/RouteStatValue"
-                                tools:text="3" />
-                        </LinearLayout>
-
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
-
-                            <TextView style="@style/StatLabel" android:text="@string/sub_section_balance" />
-
-                            <TextView
-                                android:id="@+id/subBalance"
-                                style="@style/RouteStatValue"
-                                tools:text="150 ₽" />
-                        </LinearLayout>
+                        <TextView
+                            android:id="@+id/subTraffic"
+                            style="@style/RouteStatValue"
+                            android:maxLines="1"
+                            android:textSize="16sp" />
                     </LinearLayout>
 
-                    <ProgressBar
-                        android:id="@+id/subTrafficBar"
-                        style="?android:attr/progressBarStyleHorizontal"
-                        android:layout_width="match_parent"
-                        android:layout_height="3dp"
-                        android:layout_marginTop="10dp"
-                        android:max="100"
-                        android:progressBackgroundTint="@color/hair_strong"
-                        android:progressTint="@color/accent_emerald"
-                        android:visibility="gone" />
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginHorizontal="4dp"
+                        android:background="@drawable/bg_stats_card_soft"
+                        android:gravity="center_horizontal"
+                        android:orientation="vertical"
+                        android:paddingHorizontal="8dp"
+                        android:paddingVertical="10dp">
+
+                        <TextView style="@style/StatLabel" android:text="@string/sub_devices" />
+
+                        <TextView
+                            android:id="@+id/subDevices"
+                            style="@style/RouteStatValue"
+                            android:maxLines="1"
+                            android:textSize="16sp" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="4dp"
+                        android:background="@drawable/bg_stats_card_soft"
+                        android:gravity="center_horizontal"
+                        android:orientation="vertical"
+                        android:paddingHorizontal="8dp"
+                        android:paddingVertical="10dp">
+
+                        <TextView style="@style/StatLabel" android:text="@string/sub_section_balance" />
+
+                        <TextView
+                            android:id="@+id/subBalance"
+                            style="@style/RouteStatValue"
+                            android:maxLines="1"
+                            android:textSize="16sp" />
+                    </LinearLayout>
                 </LinearLayout>
+
+                <ProgressBar
+                    android:id="@+id/subTrafficBar"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="3dp"
+                    android:layout_marginTop="8dp"
+                    android:max="100"
+                    android:progressBackgroundTint="@color/hair_strong"
+                    android:progressTint="@color/accent_emerald"
+                    android:visibility="gone" />
 
                 <!-- Renew / buy: period cards, two per row, filled in code -->
                 <TextView
@@ -243,7 +253,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:background="@drawable/bg_stats_card"
+                    android:background="@drawable/bg_stats_card_soft"
                     android:orientation="vertical"
                     android:paddingHorizontal="12dp"
                     android:paddingVertical="4dp" />
@@ -259,7 +269,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:background="@drawable/bg_stats_card"
+                    android:background="@drawable/bg_stats_card_soft"
                     android:orientation="vertical"
                     android:paddingHorizontal="12dp"
                     android:paddingVertical="4dp" />
@@ -276,7 +286,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:background="@drawable/bg_stats_card"
+                android:background="@drawable/bg_stats_card_soft"
                 android:clickable="true"
                 android:focusable="true"
                 android:foreground="?attr/selectableItemBackground"
