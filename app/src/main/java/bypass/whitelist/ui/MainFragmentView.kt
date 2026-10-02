@@ -354,7 +354,7 @@ class MainFragmentView(private val root: View) {
     fun setThroughput(rxBytesPerSec: Long, txBytesPerSec: Long) {
         routeRx.text = formatSpeed(rxBytesPerSec)
         routeTx.text = formatSpeed(txBytesPerSec)
-        routeSpark.push(rxBytesPerSec + txBytesPerSec)
+        routeSpark.push(rxBytesPerSec, txBytesPerSec)
     }
 
     private fun formatSpeed(bytesPerSec: Long): String {
