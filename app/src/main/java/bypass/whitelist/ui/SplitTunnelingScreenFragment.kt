@@ -23,6 +23,8 @@ import bypass.whitelist.tunnel.SplitTunnelingMode
 import bypass.whitelist.tunnel.TunnelVpnService
 import bypass.whitelist.tunnel.XrayVpnService
 import bypass.whitelist.util.Prefs
+import bypass.whitelist.xray.XrayRouting
+import com.google.android.material.materialswitch.MaterialSwitch
 import java.lang.ref.WeakReference
 
 /**
@@ -112,6 +114,7 @@ class SplitTunnelingScreenFragment : Fragment() {
             }
         })
 
+        setupRoutingAuto(view)
         applyMode(mode, persist = false)
         refreshAppsList(initial = true)
         viewInitialized = true
@@ -130,6 +133,58 @@ class SplitTunnelingScreenFragment : Fragment() {
         }
         viewInitialized = false
         super.onDestroyView()
+    }
+
+    private var geoLoading = false
+
+    private fun setupRoutingAuto(view: View) {
+        view.findViewById<View>(R.id.routingCard).clipToOutline = true
+        val switch = view.findViewById<MaterialSwitch>(R.id.routingAutoSwitch)
+        val sub = view.findViewById<TextView>(R.id.routingAutoSub)
+        val assetsDir = requireContext().filesDir.resolve("xray")
+        fun render() {
+            switch.isChecked = Prefs.xrayRoutingAuto
+            val profile = XrayRouting.currentProfile
+            sub.text = if (!Prefs.xrayRoutingAuto || profile == null) {
+                getString(R.string.routing_auto_sub)
+            } else {
+                val geo = when {
+                    geoLoading -> R.string.routing_auto_geo_loading
+                    XrayRouting.geoFilesPresent(assetsDir) -> R.string.routing_auto_geo_ready
+                    else -> R.string.routing_auto_geo_missing
+                }
+                getString(R.string.routing_auto_status, profile.name, getString(geo))
+            }
+        }
+        fun fetchGeo(force: Boolean) {
+            geoLoading = true
+            render()
+            val weakSelf = WeakReference(this)
+            XrayRouting.ensureGeoFilesAsync(assetsDir, force) { ok ->
+                val act = weakSelf.get()?.activity ?: return@ensureGeoFilesAsync
+                act.runOnUiThread {
+                    val self = weakSelf.get() ?: return@runOnUiThread
+                    self.geoLoading = false
+                    if (!self.isAdded || self.view == null) return@runOnUiThread
+                    if (!ok) Toast.makeText(act, R.string.routing_auto_geo_failed, Toast.LENGTH_LONG).show()
+                    render()
+                }
+            }
+        }
+        view.findViewById<View>(R.id.routingAutoRow).setOnClickListener {
+            if (!Prefs.xrayRoutingAuto && XrayRouting.currentProfile == null) {
+                Toast.makeText(requireContext(), R.string.routing_auto_no_profile, Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+            Prefs.xrayRoutingAuto = !Prefs.xrayRoutingAuto
+            if (Prefs.xrayRoutingAuto) fetchGeo(force = false) else render()
+        }
+        // Long press: force re-download of geoip/geosite.
+        view.findViewById<View>(R.id.routingAutoRow).setOnLongClickListener {
+            if (Prefs.xrayRoutingAuto && XrayRouting.currentProfile != null && !geoLoading) fetchGeo(force = true)
+            true
+        }
+        render()
     }
 
     private fun popSelf() {

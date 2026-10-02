@@ -308,6 +308,25 @@ object Prefs {
     val activeLoopbackSocksPort: Long
         get() = if (connectionMode == ConnectionMode.XRAY) xraySocksPort else socksPort
 
+    /** "Route table (auto)": apply the subscription's Happ-style routing profile (Xray mode only). */
+    var xrayRoutingAuto: Boolean
+        get() = prefs.getBoolean(PrefsKeys.XRAY_ROUTING_AUTO, false)
+        set(value) = prefs.edit { putBoolean(PrefsKeys.XRAY_ROUTING_AUTO, value) }
+
+    /** Decoded JSON of the last `routing` header a subscription sent (see [bypass.whitelist.xray.XrayRouting]). */
+    var xrayRoutingProfile: String
+        get() = prefs.getString(PrefsKeys.XRAY_ROUTING_PROFILE, "") ?: ""
+        set(value) = prefs.edit { putString(PrefsKeys.XRAY_ROUTING_PROFILE, value) }
+
+    var xrayGeoUpdatedMs: Long
+        get() = prefs.getLong(PrefsKeys.XRAY_GEO_UPDATED_MS, 0L)
+        set(value) = prefs.edit { putLong(PrefsKeys.XRAY_GEO_UPDATED_MS, value) }
+
+    /** `geoipUrl|geositeUrl` the files in filesDir/xray were downloaded from. */
+    var xrayGeoSource: String
+        get() = prefs.getString(PrefsKeys.XRAY_GEO_SOURCE, "") ?: ""
+        set(value) = prefs.edit { putString(PrefsKeys.XRAY_GEO_SOURCE, value) }
+
     // Split tunneling is shared globally: see [splitTunnelingMode]/[splitTunnelingPackages]
     // above, used by both TunnelVpnService (instance/call) and XrayVpnService.
 

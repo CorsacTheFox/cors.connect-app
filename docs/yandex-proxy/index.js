@@ -45,6 +45,7 @@ const PASSTHROUGH_RESPONSE_HEADERS = [
     'profile-web-page-url',
     'support-url',
     'announce',
+    'routing',
 ];
 
 const corsHeaders = {

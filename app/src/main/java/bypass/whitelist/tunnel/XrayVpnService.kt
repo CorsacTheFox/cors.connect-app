@@ -25,6 +25,7 @@ import bypass.whitelist.util.Callback
 import bypass.whitelist.util.Prefs
 import bypass.whitelist.util.Vpn
 import bypass.whitelist.xray.XrayConfigBuilder
+import bypass.whitelist.xray.XrayRouting
 import bypass.whitelist.xray.XrayEngine
 import bypass.whitelist.xray.XrayServer
 import java.net.InetSocketAddress
@@ -490,9 +491,23 @@ class XrayVpnService : VpnService() {
         // NoSuchMethodError). Catching Throwable here turns any of that into
         // a recoverable "connection failed" state instead of a process crash.
         try {
-            engine.initEnv(applicationContext.filesDir.resolve("xray"))
-            val configJson = XrayConfigBuilder.buildForXrayServer(server, Vpn.MTU)
-            if (!engine.start(configJson, fd)) {
+            val assetsDir = applicationContext.filesDir.resolve("xray")
+            engine.initEnv(assetsDir)
+            val routing = if (Prefs.xrayRoutingAuto) XrayRouting.currentProfile else null
+            val geoAvailable = routing != null && XrayRouting.geoFilesPresent(assetsDir)
+            if (routing != null) {
+                TunnelServiceState.logCallback?.invoke(
+                    "Route table: ${routing.name}" + if (geoAvailable) "" else " (geo files missing — geosite/geoip rules skipped)",
+                )
+                if (!geoAvailable) XrayRouting.ensureGeoFilesAsync(assetsDir)
+            }
+            var started = engine.start(XrayConfigBuilder.buildForXrayServer(server, Vpn.MTU, routing, geoAvailable), fd)
+            if (!started && routing != null) {
+                // A bad profile (unknown geosite tag, corrupt .dat) must not cost the user the tunnel.
+                TunnelServiceState.logCallback?.invoke("Route table rejected by Xray — connecting without it")
+                started = engine.start(XrayConfigBuilder.buildForXrayServer(server, Vpn.MTU), fd)
+            }
+            if (!started) {
                 startInProgress = false
                 closeRawFd(fd)
                 rawTunFd = null

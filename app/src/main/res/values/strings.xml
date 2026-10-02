@@ -461,4 +461,12 @@
     <string name="push_channel">Announcements</string>
     <string name="sub_continue">Continue</string>
     <string name="main_pull_hint">Pull down to refresh the list</string>
+    <string name="routing_auto_title">Route table (auto)</string>
+    <string name="routing_auto_sub">Xray mode only. Rules come from your subscription</string>
+    <string name="routing_auto_no_profile">Your subscription sends no routing rules yet — refresh it</string>
+    <string name="routing_auto_status">%1$s · geo files: %2$s</string>
+    <string name="routing_auto_geo_ready">ready</string>
+    <string name="routing_auto_geo_loading">downloading…</string>
+    <string name="routing_auto_geo_missing">not downloaded</string>
+    <string name="routing_auto_geo_failed">Couldn\'t download geoip/geosite, will retry on connect</string>
 </resources>

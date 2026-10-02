@@ -88,6 +88,10 @@ object PrefsKeys {
     const val XRAY_ACTIVE_SERVER_ID = "xray_active_server_id"
     const val XRAY_SUBSCRIPTIONS = "xray_subscriptions"
     const val XRAY_SOCKS_PORT = "xray_socks_port"
+    const val XRAY_ROUTING_AUTO = "xray_routing_auto"
+    const val XRAY_ROUTING_PROFILE = "xray_routing_profile"
+    const val XRAY_GEO_UPDATED_MS = "xray_geo_updated_ms"
+    const val XRAY_GEO_SOURCE = "xray_geo_source"
 
     // Cors.Connect service
     const val CORS_BASE_URL = "cors_base_url"

@@ -17,11 +17,13 @@ class App : Application() {
         super.onCreate()
         instance = this
         Prefs.init(this)
+        bypass.whitelist.xray.XrayRouting.assetsDir = filesDir.resolve("xray")
         applyTheme(Prefs.themeMode)
         installCrashLogger()
         bootstrapGoMobile()
         startSubscriptionAutoRefresh()
         bypass.whitelist.notify.PushFeed.schedule(this)
+        bypass.whitelist.xray.XrayRouting.scheduleGeoRefresh(this)
     }
 
     /**

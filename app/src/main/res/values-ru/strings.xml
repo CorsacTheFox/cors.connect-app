@@ -466,4 +466,12 @@
     <string name="push_channel">Новости и уведомления</string>
     <string name="sub_continue">Продолжить</string>
     <string name="main_pull_hint">Потяните вниз для обновления списка</string>
+    <string name="routing_auto_title">Таблица маршрутов (авто)</string>
+    <string name="routing_auto_sub">Только для Xray. Правила приходят из подписки</string>
+    <string name="routing_auto_no_profile">Подписка пока не прислала правила — обновите её</string>
+    <string name="routing_auto_status">%1$s · geo-файлы: %2$s</string>
+    <string name="routing_auto_geo_ready">готовы</string>
+    <string name="routing_auto_geo_loading">загрузка…</string>
+    <string name="routing_auto_geo_missing">не скачаны</string>
+    <string name="routing_auto_geo_failed">Не удалось скачать geoip/geosite, повторим при подключении</string>
 </resources>

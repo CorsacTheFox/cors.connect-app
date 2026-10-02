@@ -42,12 +42,14 @@ object XrayConfigBuilder {
      * why this is required for the tunnel to actually pass traffic once
      * connected, not just report "connected".
      */
-    fun buildForXrayServer(server: XrayServer, mtu: Int): String =
+    fun buildForXrayServer(server: XrayServer, mtu: Int, routing: XrayRouting.Profile? = null, geoAvailable: Boolean = false): String =
         build(
             mtu = mtu,
             outbound = server.toOutboundJson("proxy"),
             routeDnsThroughProxy = true,
             withLoopbackSocks = true,
+            routing = routing,
+            geoAvailable = geoAvailable,
         )
 
     /**
@@ -105,14 +107,29 @@ object XrayConfigBuilder {
         outbound: JSONObject,
         routeDnsThroughProxy: Boolean,
         withLoopbackSocks: Boolean = false,
+        routing: XrayRouting.Profile? = null,
+        geoAvailable: Boolean = false,
     ): String {
         val root = JSONObject()
         root.put("log", JSONObject().put("loglevel", if (Prefs.debug) "debug" else "warning"))
-        root.put("dns", buildDns(routeDnsThroughProxy))
+        val dns = buildDns(routeDnsThroughProxy)
+        val domesticDns = routing?.domesticDnsIp?.takeIf { it.isNotEmpty() }
+        if (routing != null && domesticDns != null) {
+            val domains = XrayRouting.domesticDnsDomains(routing, geoAvailable)
+            if (domains.isNotEmpty()) {
+                dns.getJSONArray("servers").put(
+                    JSONObject()
+                        .put("address", domesticDns)
+                        .put("domains", JSONArray(domains))
+                        .put("skipFallback", true),
+                )
+            }
+        }
+        root.put("dns", dns)
         root.put(
             "inbounds",
             JSONArray().apply {
-                put(buildTunInbound(mtu))
+                put(buildTunInbound(mtu, sniff = routing != null))
                 if (withLoopbackSocks) put(buildLoopbackSocksInbound())
             },
         )
@@ -125,7 +142,7 @@ object XrayConfigBuilder {
                 if (routeDnsThroughProxy) put(JSONObject().put("tag", "dns-out").put("protocol", "dns"))
             },
         )
-        root.put("routing", buildRouting(routeDnsThroughProxy))
+        root.put("routing", buildRouting(routeDnsThroughProxy, routing, geoAvailable, domesticDns))
         return root.toString()
     }
 
@@ -152,11 +169,23 @@ object XrayConfigBuilder {
      * permission denied" before Xray ever reaches the Android-specific tun
      * code. Any placeholder value avoids that code path entirely.
      */
-    private fun buildTunInbound(mtu: Int): JSONObject = JSONObject().apply {
+    private fun buildTunInbound(mtu: Int, sniff: Boolean): JSONObject = JSONObject().apply {
         put("tag", "tun-in")
         put("port", 0)
         put("protocol", "tun")
         put("settings", JSONObject().put("mtu", mtu).put("name", "xray-tun"))
+        // Domain rules (geosite:/domain:) need the hostname, which TUN traffic
+        // only carries in SNI/Host. routeOnly: match on it but keep dialing the
+        // original IP, so no second DNS lookup happens.
+        if (sniff) {
+            put(
+                "sniffing",
+                JSONObject()
+                    .put("enabled", true)
+                    .put("destOverride", JSONArray().put("http").put("tls").put("quic"))
+                    .put("routeOnly", true),
+            )
+        }
     }
 
     /** A `socks` outbound pointed at a local SOCKS5 proxy already listening on loopback. */
@@ -254,7 +283,12 @@ object XrayConfigBuilder {
      * the VpnService layer, not here) — this object is the natural place to
      * extend later with a `rules` list built from user-editable domain rules.
      */
-    private fun buildRouting(routeDnsThroughProxy: Boolean): JSONObject {
+    private fun buildRouting(
+        routeDnsThroughProxy: Boolean,
+        profile: XrayRouting.Profile? = null,
+        geoAvailable: Boolean = false,
+        domesticDnsIp: String? = null,
+    ): JSONObject {
         val privateCidrs = JSONArray()
             .put("127.0.0.0/8")
             .put("10.0.0.0/8")
@@ -266,6 +300,17 @@ object XrayConfigBuilder {
             .put("fe80::/10")
         val rules = JSONArray()
         if (routeDnsThroughProxy) {
+            if (profile != null && domesticDnsIp != null) {
+                // Domestic resolver (e.g. Yandex DNS for .ru) must be reached directly,
+                // otherwise it'd answer with the exit node's geo view.
+                rules.put(
+                    JSONObject()
+                        .put("type", "field")
+                        .put("inboundTag", JSONArray().put("dns_in"))
+                        .put("ip", JSONArray().put(domesticDnsIp))
+                        .put("outboundTag", "direct"),
+                )
+            }
             rules.put(
                 JSONObject()
                     .put("type", "field")
@@ -286,6 +331,10 @@ object XrayConfigBuilder {
                 .put("outboundTag", "direct")
                 .put("ip", privateCidrs),
         )
+        if (profile != null) {
+            XrayRouting.buildRules(profile, geoAvailable).forEach { rules.put(it) }
+            return JSONObject().put("domainStrategy", profile.domainStrategy).put("rules", rules)
+        }
         return JSONObject().put("domainStrategy", "AsIs").put("rules", rules)
     }
 }

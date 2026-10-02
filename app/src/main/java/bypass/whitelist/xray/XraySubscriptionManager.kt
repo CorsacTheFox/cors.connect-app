@@ -160,6 +160,7 @@ object XraySubscriptionManager {
             if (code !in 200..299) {
                 throw XraySubscriptionException("Subscription fetch failed (HTTP $code)")
             }
+            XrayRouting.onSubscriptionHeader(conn.getHeaderField("routing"))
             return text to SubscriptionUserInfo.parse(conn.getHeaderField("subscription-userinfo"))
         } catch (e: XraySubscriptionException) {
             throw e
