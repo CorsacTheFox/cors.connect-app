@@ -192,8 +192,7 @@ class MainFragmentView(private val root: View) {
     fun bindHero(connected: Boolean, status: VpnStatus?) {
         val context = root.context
         val accent = context.getColor(R.color.accent_emerald)
-        connectBarIcon.setColorFilter(accent)
-        connectBarLabel.setTextColor(accent)
+        animateConnectBar(connected)
         val connecting = status == VpnStatus.CONNECTING || status == VpnStatus.STARTING ||
             status == VpnStatus.STOPPING || status == VpnStatus.CALL_CONNECTED ||
             status == VpnStatus.DATACHANNEL_OPEN
@@ -823,5 +822,48 @@ class MainFragmentView(private val root: View) {
         }
         mainTop.weigh(topFills)
         mainListScroll.weigh(!topFills)
+    }
+
+    /**
+     * Connect button skin: solid black with an accent outline while idle /
+     * connecting, cross-fading to solid green (dark label) once connected.
+     */
+    private val connectBarBg = android.graphics.drawable.GradientDrawable().apply {
+        cornerRadius = 8 * root.resources.displayMetrics.density
+    }
+    private var connectBarGreen: Boolean? = null
+    private var connectBarAnim: android.animation.ValueAnimator? = null
+
+    private fun animateConnectBar(green: Boolean) {
+        if (connectBarGreen == green) return
+        val ctx = root.context
+        val idleFill = 0xFF050508.toInt()
+        val idleStroke = ctx.getColor(R.color.accent_border)
+        val idleInk = ctx.getColor(R.color.accent_emerald)
+        val onFill = ctx.getColor(R.color.ok_green)
+        val onInk = 0xFF06140C.toInt()
+        val from = if (green) 0f else 1f
+        val to = if (green) 1f else 0f
+        val first = connectBarGreen == null
+        connectBarGreen = green
+        if (first) connectBar.background = android.graphics.drawable.RippleDrawable(
+            android.content.res.ColorStateList.valueOf(ctx.getColor(R.color.accent_glow)), connectBarBg, null,
+        )
+        val eval = android.animation.ArgbEvaluator()
+        fun apply(t: Float) {
+            connectBarBg.setColor(eval.evaluate(t, idleFill, onFill) as Int)
+            connectBarBg.setStroke((1 * ctx.resources.displayMetrics.density).toInt(), eval.evaluate(t, idleStroke, onFill) as Int)
+            val ink = eval.evaluate(t, idleInk, onInk) as Int
+            connectBarLabel.setTextColor(ink)
+            connectBarIcon.setColorFilter(ink)
+        }
+        connectBarAnim?.cancel()
+        if (first) { apply(to); return }
+        connectBarAnim = android.animation.ValueAnimator.ofFloat(from, to).apply {
+            duration = 450
+            interpolator = android.view.animation.DecelerateInterpolator()
+            addUpdateListener { apply(it.animatedValue as Float) }
+            start()
+        }
     }
 }
