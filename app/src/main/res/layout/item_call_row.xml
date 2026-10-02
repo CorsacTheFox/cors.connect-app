@@ -73,15 +73,42 @@
             android:textSize="9sp" />
 
         <!-- Node load bar (Xray rows, from the panel's node-load feed) -->
-        <ProgressBar
-            android:id="@+id/rowLoadBar"
-            style="?android:attr/progressBarStyleHorizontal"
+        <LinearLayout
+            android:id="@+id/rowLoadRow"
             android:layout_width="match_parent"
-            android:layout_height="2dp"
+            android:layout_height="wrap_content"
             android:layout_marginTop="5dp"
-            android:max="100"
-            android:progressBackgroundTint="@color/hair_strong"
-            android:visibility="gone" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:fontFamily="monospace"
+                android:text="@string/node_load_label"
+                android:textColor="@color/ink_3"
+                android:textSize="9sp" />
+
+            <ProgressBar
+                android:id="@+id/rowLoadBar"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="2dp"
+                android:max="100"
+                android:progressBackgroundTint="@color/hair_strong" />
+
+            <TextView
+                android:id="@+id/rowLoadPercent"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:fontFamily="monospace"
+                android:textColor="@color/ink_3"
+                android:textSize="9sp" />
+        </LinearLayout>
     </LinearLayout>
 
     <TextView

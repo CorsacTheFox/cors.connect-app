@@ -778,9 +778,10 @@ class MainFragmentView(private val root: View) {
     private fun nodeLoadKey(server: XrayServer) = "${server.address}:${server.port}"
 
     private fun bindRowLoad(row: View, load: NodeLoadClient.NodeLoad?) {
+        val loadRow = row.findViewById<View>(R.id.rowLoadRow)
         val bar = row.findViewById<android.widget.ProgressBar>(R.id.rowLoadBar)
         if (load == null) {
-            bar.visibility = View.GONE
+            loadRow.visibility = View.GONE
             return
         }
         val color = row.context.getColor(
@@ -792,6 +793,10 @@ class MainFragmentView(private val root: View) {
         )
         bar.progress = load.load
         bar.progressTintList = android.content.res.ColorStateList.valueOf(color)
-        bar.visibility = View.VISIBLE
+        row.findViewById<TextView>(R.id.rowLoadPercent).apply {
+            text = "${load.load}%"
+            setTextColor(color)
+        }
+        loadRow.visibility = View.VISIBLE
     }
 }
