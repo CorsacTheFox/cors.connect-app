@@ -129,6 +129,8 @@ class MainFragmentView(private val root: View) {
     /** TCP ping cache: server id → RTT ms (-1 = timeout), see [bindPing]. */
     private val pingCache = mutableMapOf<String, Int>()
     private val pingInFlight = mutableSetOf<String>()
+    /** Real-delay probes each spin up a throwaway core — cap the parallelism. */
+    private val pingExecutor = java.util.concurrent.Executors.newFixedThreadPool(3)
     /** Last row [TextView] and host:port bound per ping key — drives [refreshVisiblePings]. */
     private val pingViews = mutableMapOf<String, TextView>()
     private val pingTargets = mutableMapOf<String, Pair<String, Int>>()
@@ -480,6 +482,20 @@ class MainFragmentView(private val root: View) {
             }
             callsList.addView(row)
         }
+        if ((mainListScroll.layoutParams as LinearLayout.LayoutParams).weight == 0f) mainListScroll.post { fitListToContent() }
+        // Whitelist Bypass has no node-load line — match the server rows' height.
+        if (callsList.childCount > 1) {
+            val wl = callsList.getChildAt(0)
+            val ref = callsList.getChildAt(1)
+            val w = callsList.width.takeIf { it > 0 } ?: (root.width - 2 * (16 * root.resources.displayMetrics.density).toInt())
+            if (w > 0) {
+                ref.measure(
+                    View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                )
+                wl.minimumHeight = ref.measuredHeight
+            }
+        }
     }
 
     /**
@@ -617,16 +633,19 @@ class MainFragmentView(private val root: View) {
     private fun measurePingAsync(key: String, host: String, port: Int, linkView: TextView?) {
         if (!pingInFlight.add(key)) return
         updatePingCheckSpin()
-        thread {
+        pingExecutor.execute {
             val rtt = pingServers[key]
                 ?.let { XrayEngine.measureServerDelay(it, root.context.filesDir.resolve("xray")) }
                 ?: if (key in pingServers) null else measurePing(host, port)
             pingCache[key] = rtt ?: -1
-            pingInFlight.remove(key)
             mainHandler.post {
+                pingInFlight.remove(key)
                 updatePingCheckSpin()
-                if (linkView != null && linkView.isAttachedToWindow && linkView.visibility == View.VISIBLE) {
-                    applyPingText(linkView, rtt ?: -1)
+                // The list re-inflates often (refresh, selection, …): write to
+                // the row currently bound to this key, not the one we started with.
+                val view = pingViews[key] ?: linkView
+                if (view != null && view.isAttachedToWindow && view.visibility == View.VISIBLE) {
+                    applyPingText(view, rtt ?: -1)
                 }
                 refreshRoutePing()
             }
@@ -826,6 +845,24 @@ class MainFragmentView(private val root: View) {
         }
         mainTop.weigh(topFills)
         mainListScroll.weigh(!topFills)
+        // SwipeRefreshLayout can't wrap_content (it measures to the parent),
+        // so when the top fills, size the list wrapper to its content height.
+        if (topFills) mainListScroll.post { fitListToContent() }
+    }
+
+    private fun fitListToContent() {
+        val lp = mainListScroll.layoutParams as LinearLayout.LayoutParams
+        if (lp.weight != 0f) return
+        val content = (root.findViewById<android.view.ViewGroup>(R.id.mainListScrollInner)).getChildAt(0) ?: return
+        val w = mainListScroll.width.takeIf { it > 0 } ?: root.width
+        content.measure(
+            View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+        )
+        if (lp.height != content.measuredHeight) {
+            lp.height = content.measuredHeight
+            mainListScroll.layoutParams = lp
+        }
     }
 
     /**
