@@ -82,6 +82,8 @@ class MainFragmentView(private val root: View) {
     private val pingButtonDot: View = root.findViewById(R.id.pingButtonDot)
     private val routeAllServers: View = root.findViewById(R.id.routeAllServers)
     private val routeSectionHeader: View = root.findViewById(R.id.routeSectionHeader)
+    private val mainTop: View = root.findViewById(R.id.mainTop)
+    private val mainListScroll: View = root.findViewById(R.id.mainListScroll)
 
     var onAddCallClicked: Callback? = null
     var onScanQrClicked: Callback? = null
@@ -195,6 +197,7 @@ class MainFragmentView(private val root: View) {
         val connecting = status == VpnStatus.CONNECTING || status == VpnStatus.STARTING ||
             status == VpnStatus.STOPPING || status == VpnStatus.CALL_CONNECTED ||
             status == VpnStatus.DATACHANNEL_OPEN
+        setTopFills(connected)
         if (connected) {
             connectBarLabel.text = context.getString(R.string.hero_disconnect)
             routeStatusLine.text = context.getString(R.string.route_status_connected, routeUptime.text.ifBlank { "00:00:00" })
@@ -804,5 +807,21 @@ class MainFragmentView(private val root: View) {
             setTextColor(color)
         }
         loadRow.visibility = View.VISIBLE
+    }
+
+    /**
+     * The top block never scrolls. Connected: it takes the spare height (the
+     * traffic graph stretches) and the one-row list wraps. Otherwise the
+     * list takes the rest of the screen and scrolls on its own.
+     */
+    private fun setTopFills(topFills: Boolean) {
+        fun View.weigh(fill: Boolean) {
+            val lp = layoutParams as LinearLayout.LayoutParams
+            lp.height = if (fill) 0 else LinearLayout.LayoutParams.WRAP_CONTENT
+            lp.weight = if (fill) 1f else 0f
+            layoutParams = lp
+        }
+        mainTop.weigh(topFills)
+        mainListScroll.weigh(!topFills)
     }
 }
