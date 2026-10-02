@@ -41,6 +41,17 @@
         <item name="colorPrimary">@color/accent_emerald</item>
     </style>
 
+    <!-- Popup buttons: 8dp corners like the rest of the app, not M3 pills -->
+    <style name="Widget.WhitelistBypass.PopupButton" parent="Widget.Material3.Button">
+        <item name="cornerRadius">8dp</item>
+    </style>
+    <style name="Widget.WhitelistBypass.PopupButton.Tonal" parent="Widget.Material3.Button.TonalButton">
+        <item name="cornerRadius">8dp</item>
+    </style>
+    <style name="Widget.WhitelistBypass.PopupButton.Text" parent="Widget.Material3.Button.TextButton">
+        <item name="cornerRadius">8dp</item>
+    </style>
+
     <style name="Animation.WhitelistBypass.CenteredDialog" parent="">
         <item name="android:windowEnterAnimation">@anim/popup_in</item>
         <item name="android:windowExitAnimation">@anim/popup_out</item>

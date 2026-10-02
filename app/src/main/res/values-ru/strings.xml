@@ -464,4 +464,5 @@
     <string name="sub_logout_q">Выйти из аккаунта?</string>
     <string name="sub_logout_sub">Подписка и серверы в приложении останутся</string>
     <string name="push_channel">Новости и уведомления</string>
+    <string name="sub_continue">Продолжить</string>
 </resources>

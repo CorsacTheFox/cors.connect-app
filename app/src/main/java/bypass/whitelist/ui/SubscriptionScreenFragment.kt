@@ -469,7 +469,7 @@ class SubscriptionScreenFragment : Fragment(R.layout.fragment_subscription_scree
 
     private fun askTopUp() {
         InputActionSheet.show(parentFragmentManager, getString(R.string.sub_topup), null,
-            getString(R.string.sub_topup_amount), "300") { value ->
+            getString(R.string.sub_topup_amount), "300", getString(R.string.sub_continue)) { value ->
             val rubles = value.trim().replace(',', '.').toDoubleOrNull()
             if (rubles == null || rubles < 10) toast(getString(R.string.sub_topup_min))
             else startTopUp((rubles * 100).toLong())

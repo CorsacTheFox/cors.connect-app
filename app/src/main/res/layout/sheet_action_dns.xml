@@ -78,7 +78,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/dnsCancelButton"
-                style="@style/Widget.Material3.Button.TonalButton"
+                style="@style/Widget.WhitelistBypass.PopupButton.Tonal"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -86,7 +86,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/dnsSaveButton"
-                style="@style/Widget.Material3.Button"
+                style="@style/Widget.WhitelistBypass.PopupButton"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"

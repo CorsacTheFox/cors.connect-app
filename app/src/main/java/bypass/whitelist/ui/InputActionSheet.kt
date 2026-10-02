@@ -18,6 +18,7 @@ class InputActionSheet : CenteredSheet() {
     private var fieldLabel: String = ""
     private var initialValue: String = ""
     private var onSave: ParamCallback<String>? = null
+    private var confirmLabel: String? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -32,6 +33,7 @@ class InputActionSheet : CenteredSheet() {
         val input = view.findViewById<EditText>(R.id.inputField)
         val cancel = view.findViewById<MaterialButton>(R.id.buttonCancel)
         val save = view.findViewById<MaterialButton>(R.id.buttonSave)
+        confirmLabel?.let { save.text = it }
 
         titleView.text = titleText
         if (subtitleText.isNullOrBlank()) {
@@ -63,6 +65,7 @@ class InputActionSheet : CenteredSheet() {
             subtitle: String? = null,
             fieldLabel: String,
             initialValue: String,
+            confirmLabel: String? = null,
             onSave: ParamCallback<String>,
         ) {
             InputActionSheet().apply {
@@ -71,6 +74,7 @@ class InputActionSheet : CenteredSheet() {
                 this.fieldLabel = fieldLabel
                 this.initialValue = initialValue
                 this.onSave = onSave
+                this.confirmLabel = confirmLabel
             }.show(manager, "InputActionSheet")
         }
     }
