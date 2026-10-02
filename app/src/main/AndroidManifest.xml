@@ -72,6 +72,19 @@
                     android:host="tginit" />
             </intent-filter>
 
+            <!-- Bot cabinet OAuth redirect (Google etc.) — verified App Link,
+                 assetlinks.json is served by Caddy on miniapp.cors-fox.cc. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:scheme="https"
+                    android:host="miniapp.cors-fox.cc"
+                    android:pathPrefix="/auth/oauth/callback" />
+            </intent-filter>
+
             <!-- Subscription import: corsconnect://add/<subscription-url> -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />

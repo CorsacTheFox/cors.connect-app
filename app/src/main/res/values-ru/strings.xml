@@ -61,7 +61,7 @@
     <string name="nav_main">Главная</string>
     <string name="nav_settings">Настройки</string>
     <string name="nav_activity">Логи</string>
-    <string name="nav_servers">Серверы</string>
+    <string name="nav_servers">Подписка</string>
 
     <string name="main_sub_no_configs">Нет сохранённых подключений</string>
     <plurals name="main_sub_count">
@@ -389,4 +389,57 @@
     <string name="auth_required_hint">Без авторизации обход вайтлистов работает 5 минут, затем сессия обрывается — добавьте подписку</string>
     <string name="auth_hint_bot_link">Открыть @corsxray2bot</string>
     <string name="node_load_label">Загруженность ноды</string>
+    <string name="sub_section_manage">Управление подпиской</string>
+    <string name="sub_login_telegram">Войти через Telegram-бота</string>
+    <string name="sub_login_telegram_sub">Продление, покупка и баланс прямо в приложении</string>
+    <string name="sub_login_waiting">Подтвердите вход в боте…</string>
+    <string name="sub_login_email">Войти по email</string>
+    <string name="sub_login_oauth">Войти через %1$s</string>
+    <string name="sub_open_bot">Открыть бота</string>
+    <string name="sub_open_bot_sub">Управлять подпиской в Telegram</string>
+    <string name="sub_section_status">Подписка</string>
+    <string name="sub_loading">Загрузка…</string>
+    <string name="sub_retry">Нажмите, чтобы повторить</string>
+    <string name="sub_error_generic">Не удалось выполнить запрос</string>
+    <string name="sub_none">Нет активной подписки</string>
+    <string name="sub_status_active">Подписка активна</string>
+    <string name="sub_status_trial">Пробный период</string>
+    <string name="sub_status_expired">Подписка истекла</string>
+    <string name="sub_until">до %1$s</string>
+    <string name="sub_days">%1$d дн.</string>
+    <string name="sub_traffic">Трафик</string>
+    <string name="sub_devices">Устройств</string>
+    <string name="sub_add_servers">Добавить серверы подписки</string>
+    <string name="sub_add_servers_sub">Импортировать ссылку подписки из кабинета</string>
+    <string name="sub_section_renew">Продление</string>
+    <string name="sub_section_buy">Покупка</string>
+    <string name="sub_period">Продлить на %1$s</string>
+    <string name="sub_confirm_renew">Продлить на %1$s за %2$s?</string>
+    <string name="sub_confirm_buy">Купить «%1$s» на %2$s за %3$s?</string>
+    <string name="sub_buy_in_bot">Купить подписку в боте</string>
+    <string name="sub_section_balance">Баланс</string>
+    <string name="sub_topup">Пополнить баланс</string>
+    <string name="sub_balance_sub">Текущий баланс</string>
+    <string name="sub_topup_amount">Сумма, ₽</string>
+    <string name="sub_topup_min">Минимум 10 ₽</string>
+    <string name="sub_section_links">Ссылки подписок</string>
+    <string name="sub_links_manage">Мои подписки</string>
+    <string name="sub_links_manage_sub">Добавить или обновить подписку по ссылке</string>
+    <string name="sub_section_account">Аккаунт</string>
+    <string name="sub_open_cabinet">Открыть веб-кабинет</string>
+    <string name="sub_logout">Выйти из аккаунта</string>
+    <string name="sub_email_hint">Email</string>
+    <string name="sub_password_hint">Пароль</string>
+    <string name="sub_email_register_forgot">Регистрация или восстановление пароля</string>
+    <string name="sub_login_button">Войти</string>
+    <string name="sub_confirm_short">Не хватает %1$s — после подтверждения откроется оплата, покупка завершится автоматически</string>
+    <string name="sub_confirm_from_balance">Будет списано с баланса</string>
+    <string name="sub_pay">Оплатить</string>
+    <string name="sub_done">Готово</string>
+    <string name="sub_no_methods">Нет доступных способов оплаты</string>
+    <string name="sub_pay_method">Способ оплаты</string>
+    <string name="sub_pay_amount">К оплате %1$s</string>
+    <plurals name="sub_months"><item quantity="one">%d месяц</item><item quantity="few">%d месяца</item><item quantity="many">%d месяцев</item><item quantity="other">%d месяца</item></plurals>
+    <plurals name="sub_years"><item quantity="one">%d год</item><item quantity="few">%d года</item><item quantity="many">%d лет</item><item quantity="other">%d года</item></plurals>
+    <plurals name="sub_days_plural"><item quantity="one">%d день</item><item quantity="few">%d дня</item><item quantity="many">%d дней</item><item quantity="other">%d дня</item></plurals>
 </resources>

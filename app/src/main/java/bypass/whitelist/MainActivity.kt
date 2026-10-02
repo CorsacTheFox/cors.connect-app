@@ -59,6 +59,7 @@ import bypass.whitelist.ui.SettingsScreenFragment
 import bypass.whitelist.ui.UpdateActionSheet
 import bypass.whitelist.ui.XrayServersListener
 import bypass.whitelist.ui.XraySubscriptionsScreenFragment
+import bypass.whitelist.ui.SubscriptionScreenFragment
 import bypass.whitelist.util.AppUpdater
 import bypass.whitelist.util.BatteryOptimizer
 import bypass.whitelist.util.LogWriter
@@ -191,7 +192,7 @@ class MainActivity :
             override fun createFragment(position: Int): Fragment {
                 return when (position) {
                     TAB_MAIN -> MainFragment()
-                    TAB_SERVERS -> XraySubscriptionsScreenFragment.newRoot()
+                    TAB_SERVERS -> SubscriptionScreenFragment()
                     TAB_LOGS -> LogsFragment()
                     else -> SettingsScreenFragment()
                 }
@@ -719,7 +720,9 @@ class MainActivity :
     }
 
     override fun openServersTab() {
-        selectNavTab(R.id.navServers)
+        // The Servers tab became "Subscription"; the full server/link list
+        // now opens as a sub-page.
+        pushSubPage(XraySubscriptionsScreenFragment())
     }
 
     private fun showOnboarding() {
@@ -887,6 +890,29 @@ class MainActivity :
 
     private fun handleIntent(intent: Intent?) {
         val data = intent?.data
+        // Bot cabinet OAuth redirect: https://miniapp.cors-fox.cc/auth/oauth/callback?code=…&state=…
+        if (intent != null && intent.action == Intent.ACTION_VIEW && data != null &&
+            data.host.equals(Uri.parse(bypass.whitelist.cabinet.CabinetApi.CABINET_URL).host, ignoreCase = true) &&
+            data.path?.startsWith("/auth/oauth/callback") == true
+        ) {
+            intent.action = null
+            val code = data.getQueryParameter("code")
+            val state = data.getQueryParameter("state")
+            val provider = Prefs.cabinetOAuthProvider
+            if (code != null && state != null && provider.isNotEmpty()) {
+                Prefs.cabinetOAuthProvider = ""
+                selectNavTab(R.id.navServers)
+                val fragment = supportFragmentManager.fragments.firstOrNull { it is SubscriptionScreenFragment } as? SubscriptionScreenFragment
+                if (fragment != null) {
+                    fragment.completeOAuth(provider, code, state, data.getQueryParameter("device_id"))
+                } else {
+                    Thread {
+                        runCatching { bypass.whitelist.cabinet.CabinetApi.oauthCallback(provider, code, state, data.getQueryParameter("device_id")) }
+                    }.start()
+                }
+            }
+            return
+        }
         // Subscription import deep link: corsconnect://add/<url-encoded-subscription-link>
         if (intent != null && intent.action == Intent.ACTION_VIEW && data != null &&
             data.scheme.equals("corsconnect", ignoreCase = true) && data.host.equals("add", ignoreCase = true)

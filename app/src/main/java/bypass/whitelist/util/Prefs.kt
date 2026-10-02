@@ -428,6 +428,20 @@ object Prefs {
 
     val corsSignedIn: Boolean get() = corsUsername.isNotEmpty()
 
+    /** Bot web-cabinet JWTs (see [bypass.whitelist.cabinet.CabinetApi]). */
+    var cabinetAccessToken: String
+        get() = prefs.getString(PrefsKeys.CABINET_ACCESS_TOKEN, "") ?: ""
+        set(value) = prefs.edit { putString(PrefsKeys.CABINET_ACCESS_TOKEN, value) }
+
+    var cabinetRefreshToken: String
+        get() = prefs.getString(PrefsKeys.CABINET_REFRESH_TOKEN, "") ?: ""
+        set(value) = prefs.edit { putString(PrefsKeys.CABINET_REFRESH_TOKEN, value) }
+
+    /** OAuth provider whose browser sign-in is in flight (matched on the callback). */
+    var cabinetOAuthProvider: String
+        get() = prefs.getString(PrefsKeys.CABINET_OAUTH_PROVIDER, "") ?: ""
+        set(value) = prefs.edit { putString(PrefsKeys.CABINET_OAUTH_PROVIDER, value) }
+
     /**
      * Stable per-install device identifier sent as the `x-hwid` header on
      * subscription requests. Remnawave (and other panels) only record a device

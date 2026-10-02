@@ -62,7 +62,7 @@
     <string name="nav_main">Main</string>
     <string name="nav_settings">Settings</string>
     <string name="nav_activity">Logs</string>
-    <string name="nav_servers">Servers</string>
+    <string name="nav_servers">Subscription</string>
 
     <string name="main_sub_no_configs">No connects saved</string>
     <plurals name="main_sub_count">
@@ -384,4 +384,57 @@
     <string name="ob_step_4_sub">Whitelist Bypass or a server from the subscription</string>
     <string name="ob_free_note">Without a subscription, Whitelist Bypass runs for 5 minutes, then the session drops. Sign in with Telegram to remove the limit.</string>
     <string name="node_load_label">Node load</string>
+    <string name="sub_section_manage">Manage subscription</string>
+    <string name="sub_login_telegram">Sign in with Telegram bot</string>
+    <string name="sub_login_telegram_sub">Renew, buy and top up right in the app</string>
+    <string name="sub_login_waiting">Confirm the sign-in in the bot…</string>
+    <string name="sub_login_email">Sign in with email</string>
+    <string name="sub_login_oauth">Sign in with %1$s</string>
+    <string name="sub_open_bot">Open bot</string>
+    <string name="sub_open_bot_sub">Manage the subscription in Telegram</string>
+    <string name="sub_section_status">Subscription</string>
+    <string name="sub_loading">Loading…</string>
+    <string name="sub_retry">Tap to retry</string>
+    <string name="sub_error_generic">Request failed</string>
+    <string name="sub_none">No active subscription</string>
+    <string name="sub_status_active">Subscription active</string>
+    <string name="sub_status_trial">Trial</string>
+    <string name="sub_status_expired">Subscription expired</string>
+    <string name="sub_until">until %1$s</string>
+    <string name="sub_days">%1$d d</string>
+    <string name="sub_traffic">Traffic</string>
+    <string name="sub_devices">Devices</string>
+    <string name="sub_add_servers">Add subscription servers</string>
+    <string name="sub_add_servers_sub">Import the subscription link from the cabinet</string>
+    <string name="sub_section_renew">Renewal</string>
+    <string name="sub_section_buy">Purchase</string>
+    <string name="sub_period">Renew for %1$s</string>
+    <string name="sub_confirm_renew">Renew for %1$s for %2$s?</string>
+    <string name="sub_confirm_buy">Buy “%1$s” for %2$s for %3$s?</string>
+    <string name="sub_buy_in_bot">Buy a subscription in the bot</string>
+    <string name="sub_section_balance">Balance</string>
+    <string name="sub_topup">Top up balance</string>
+    <string name="sub_balance_sub">Current balance</string>
+    <string name="sub_topup_amount">Amount, ₽</string>
+    <string name="sub_topup_min">Minimum 10 ₽</string>
+    <string name="sub_section_links">Subscription links</string>
+    <string name="sub_links_manage">My subscriptions</string>
+    <string name="sub_links_manage_sub">Add or refresh a subscription by link</string>
+    <string name="sub_section_account">Account</string>
+    <string name="sub_open_cabinet">Open web cabinet</string>
+    <string name="sub_logout">Sign out</string>
+    <string name="sub_email_hint">Email</string>
+    <string name="sub_password_hint">Password</string>
+    <string name="sub_email_register_forgot">Sign up or reset password</string>
+    <string name="sub_login_button">Sign in</string>
+    <string name="sub_confirm_short">%1$s short — payment opens next; the purchase completes automatically</string>
+    <string name="sub_confirm_from_balance">Charged from your balance</string>
+    <string name="sub_pay">Pay</string>
+    <string name="sub_done">Done</string>
+    <string name="sub_no_methods">No payment methods available</string>
+    <string name="sub_pay_method">Payment method</string>
+    <string name="sub_pay_amount">Amount %1$s</string>
+    <plurals name="sub_months"><item quantity="one">%d month</item><item quantity="other">%d months</item></plurals>
+    <plurals name="sub_years"><item quantity="one">%d year</item><item quantity="other">%d years</item></plurals>
+    <plurals name="sub_days_plural"><item quantity="one">%d day</item><item quantity="other">%d days</item></plurals>
 </resources>
