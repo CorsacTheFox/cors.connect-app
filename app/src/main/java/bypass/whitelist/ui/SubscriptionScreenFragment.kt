@@ -377,8 +377,7 @@ class SubscriptionScreenFragment : Fragment(R.layout.fragment_subscription_scree
         val ctx = requireContext()
         val card = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundResource(if (o.highlighted) R.drawable.bg_destination_card_active else R.drawable.bg_destination_card)
-            if (!o.highlighted) background?.mutate()?.alpha = 102
+            setBackgroundResource(if (o.highlighted) R.drawable.bg_destination_card_active else R.drawable.bg_stats_card)
             setPadding(dp(12), dp(10), dp(12), dp(10))
             isClickable = true
             isFocusable = true

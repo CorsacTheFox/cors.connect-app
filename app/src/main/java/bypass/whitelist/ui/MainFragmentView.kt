@@ -825,7 +825,7 @@ class MainFragmentView(private val root: View) {
     }
 
     /**
-     * Connect button skin: solid black with an accent outline while idle /
+     * Connect button skin: settings-card grey (panel_bg) while idle /
      * connecting, cross-fading to solid green (dark label) once connected.
      */
     private val connectBarBg = android.graphics.drawable.GradientDrawable().apply {
@@ -837,8 +837,9 @@ class MainFragmentView(private val root: View) {
     private fun animateConnectBar(green: Boolean) {
         if (connectBarGreen == green) return
         val ctx = root.context
-        val idleFill = 0xFF050508.toInt()
-        val idleStroke = ctx.getColor(R.color.accent_border)
+        // Idle: same surface as the settings cards.
+        val idleFill = ctx.getColor(R.color.panel_bg)
+        val idleStroke = ctx.getColor(R.color.hair_ink)
         val idleInk = ctx.getColor(R.color.accent_emerald)
         val onFill = ctx.getColor(R.color.ok_green)
         val onInk = 0xFF06140C.toInt()
