@@ -338,6 +338,49 @@
                     </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
+
+            <!-- Service reachability check, inside the connected card -->
+            <LinearLayout
+                android:id="@+id/pingRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:id="@+id/pingButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:background="@drawable/bg_ping_button"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="horizontal">
+
+                    <View
+                        android:id="@+id/pingButtonDot"
+                        android:layout_width="7dp"
+                        android:layout_height="7dp"
+                        android:layout_marginEnd="8dp"
+                        android:background="@drawable/bg_status_dot_idle" />
+
+                    <ImageView
+                        android:layout_width="15dp"
+                        android:layout_height="15dp"
+                        android:layout_marginEnd="8dp"
+                        android:src="@drawable/ic_radar"
+                        app:tint="@color/ink" />
+
+                    <TextView
+                        android:id="@+id/pingButtonLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/services_run"
+                        android:textColor="@color/ink"
+                        android:textSize="12.5sp" />
+                </LinearLayout>
+            </LinearLayout>
         </LinearLayout>
 
         <!-- Route section header (connected / connecting only) -->
@@ -464,47 +507,7 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <LinearLayout
-                android:id="@+id/pingRow"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:orientation="vertical"
-                android:visibility="gone">
 
-                <LinearLayout
-                    android:id="@+id/pingButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="38dp"
-                    android:background="@drawable/bg_ping_button"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center"
-                    android:orientation="horizontal">
-
-                    <View
-                        android:id="@+id/pingButtonDot"
-                        android:layout_width="7dp"
-                        android:layout_height="7dp"
-                        android:layout_marginEnd="8dp"
-                        android:background="@drawable/bg_status_dot_idle" />
-
-                    <ImageView
-                        android:layout_width="15dp"
-                        android:layout_height="15dp"
-                        android:layout_marginEnd="8dp"
-                        android:src="@drawable/ic_radar"
-                        app:tint="@color/ink" />
-
-                    <TextView
-                        android:id="@+id/pingButtonLabel"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/services_run"
-                        android:textColor="@color/ink"
-                        android:textSize="12.5sp" />
-                </LinearLayout>
-            </LinearLayout>
             <!-- Refresh subscriptions at the end of the list (ping runs automatically) -->
             <LinearLayout
                 android:id="@+id/serverActionsRow"
