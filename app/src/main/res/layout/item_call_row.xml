@@ -5,7 +5,7 @@
     android:id="@+id/callRow"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="5dp"
+    android:layout_marginBottom="4dp"
     android:background="@drawable/bg_destination_card"
     android:foreground="?attr/selectableItemBackground"
     android:clickable="true"
@@ -13,7 +13,7 @@
     android:gravity="center_vertical"
     android:orientation="horizontal"
     android:paddingHorizontal="13dp"
-    android:paddingVertical="9dp">
+    android:paddingVertical="7dp">
 
     <View
         android:id="@+id/rowStatusDot"
@@ -77,7 +77,7 @@
             android:id="@+id/rowLoadRow"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="5dp"
+            android:layout_marginTop="3dp"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:visibility="gone">
@@ -102,7 +102,8 @@
 
             <TextView
                 android:id="@+id/rowLoadPercent"
-                android:layout_width="wrap_content"
+                android:layout_width="34dp"
+                android:gravity="end"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
                 android:fontFamily="monospace"
