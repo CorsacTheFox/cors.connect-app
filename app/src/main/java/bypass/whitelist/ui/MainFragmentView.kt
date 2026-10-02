@@ -16,6 +16,7 @@ import bypass.whitelist.tunnel.VpnStatus
 import bypass.whitelist.util.Callback
 import bypass.whitelist.util.ParamCallback
 import bypass.whitelist.util.Prefs
+import bypass.whitelist.xray.XrayEngine
 import bypass.whitelist.xray.XrayServer
 import java.io.IOException
 import java.net.InetSocketAddress
@@ -122,6 +123,8 @@ class MainFragmentView(private val root: View) {
     /** Last row [TextView] and host:port bound per ping key — drives [refreshVisiblePings]. */
     private val pingViews = mutableMapOf<String, TextView>()
     private val pingTargets = mutableMapOf<String, Pair<String, Int>>()
+    /** Ping keys that are Xray servers: measured as real delay through the server, not tcping. */
+    private val pingServers = mutableMapOf<String, XrayServer>()
     private var pingCheckSpinning: Boolean = false
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -173,6 +176,7 @@ class MainFragmentView(private val root: View) {
         pingCache.keys.retainAll(liveIds)
         pingViews.keys.retainAll(liveIds)
         pingTargets.keys.retainAll(liveIds)
+        pingServers.keys.retainAll(liveIds)
         renderList()
         updateHeaderSub()
     }
@@ -517,11 +521,20 @@ class MainFragmentView(private val root: View) {
         val protocolView = row.findViewById<TextView>(R.id.rowProtocol)
         val statusDot = row.findViewById<View>(R.id.rowStatusDot)
 
-        nameView.text = server.remark
+        val (flag, name) = splitLeadingFlag(server.remark)
+        nameView.text = name
+        row.findViewById<TextView>(R.id.rowFlag).apply {
+            text = flag
+            visibility = if (flag.isEmpty()) View.GONE else View.VISIBLE
+        }
         // Connection details line: protocol · transport · security (no
         // address — see the row layout), e.g. "VLESS · WS · TLS". Default
         // transport (TCP) and no-security rows collapse to just the protocol.
         val details = buildList {
+            if (server.protocol == bypass.whitelist.xray.XrayProtocol.HYSTERIA2) {
+                add("HY2")
+                return@buildList
+            }
             add(server.protocol.wireValue.uppercase())
             if (server.network != bypass.whitelist.xray.XrayNetwork.TCP) add(server.network.wireValue.uppercase())
             if (server.security != bypass.whitelist.xray.XraySecurity.NONE) add(server.security.wireValue.uppercase())
@@ -534,9 +547,23 @@ class MainFragmentView(private val root: View) {
         // button, which re-measures all rows on demand).
         val pingView = row.findViewById<TextView>(R.id.rowPing)
         pingView.visibility = View.VISIBLE
+        pingServers[server.id] = server
         bindPing(pingView, server.id, server.address, server.port)
 
         applyRowActiveState(row, nameView, linkView, protocolView, statusDot, isActive, context)
+    }
+
+    /**
+     * Splits a leading country-flag emoji (a pair of regional indicator
+     * symbols, e.g. "🇫🇮 Finland") off [remark] so the row can show it as a
+     * large icon. Returns ("", remark) when there's no flag.
+     */
+    private fun splitLeadingFlag(remark: String): Pair<String, String> {
+        val text = remark.trimStart()
+        fun isRegional(i: Int) = i < text.length && text.codePointAt(i) in 0x1F1E6..0x1F1FF
+        if (!isRegional(0) || !isRegional(2)) return "" to remark
+        val rest = text.substring(4).trim()
+        return text.substring(0, 4) to rest.ifEmpty { remark }
     }
 
     /**
@@ -569,7 +596,9 @@ class MainFragmentView(private val root: View) {
         if (!pingInFlight.add(key)) return
         updatePingCheckSpin()
         thread {
-            val rtt = measurePing(host, port)
+            val rtt = pingServers[key]
+                ?.let { XrayEngine.measureServerDelay(it, root.context.filesDir.resolve("xray")) }
+                ?: if (key in pingServers) null else measurePing(host, port)
             pingCache[key] = rtt ?: -1
             pingInFlight.remove(key)
             mainHandler.post {
@@ -631,6 +660,9 @@ class MainFragmentView(private val root: View) {
         for ((key, view) in pingViews) {
             if (!view.isAttachedToWindow || view.visibility != View.VISIBLE) continue
             val (host, port) = pingTargets[key] ?: continue
+            // Real-delay probes start a throwaway core each; on the timer only
+            // the selected server is re-measured (the header button does all).
+            if (key in pingServers && key != Prefs.xrayActiveServerId) continue
             any = true
             measurePingAsync(key, host, port, view)
         }
@@ -655,9 +687,14 @@ class MainFragmentView(private val root: View) {
         }.start()
     }
 
-    /** Prototype 1a: sub-60ms pings read in accent, everything else muted. */
+    /**
+     * Prototype 1a: good pings read in accent, everything else muted. Server
+     * rows show real delay (a full HTTP round trip through the proxy), which
+     * runs several times a plain tcping, hence the higher bar.
+     */
     private fun colorPing(view: TextView, rttMs: Int?) {
-        val color = if (rttMs != null && rttMs in 0..59) R.color.accent_emerald else R.color.ink_3
+        val good = if (pingViews.entries.any { it.value === view && it.key in pingServers }) 0..399 else 0..59
+        val color = if (rttMs != null && rttMs in good) R.color.accent_emerald else R.color.ink_3
         view.setTextColor(root.context.getColor(color))
     }
 

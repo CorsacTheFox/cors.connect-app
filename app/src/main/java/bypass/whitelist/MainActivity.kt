@@ -1054,12 +1054,15 @@ class MainActivity :
 
     /**
      * Opens a SOCKS5 CONNECT to `host:port` through the active loopback proxy
-     * and returns the round-trip time (ms) it took the proxy to report the
-     * remote connection established — a real ping over the tunnel. Returns
-     * null on any handshake failure, refusal or premature EOF.
+     * and completes a TLS handshake with the site over it, returning the
+     * time (ms) from the CONNECT request to the finished handshake. Returns
+     * null on any SOCKS/TLS failure, refusal or premature EOF.
+     *
+     * The TLS step is what makes this real: Xray answers a SOCKS CONNECT
+     * immediately, before dialing anything, so timing the SOCKS reply alone
+     * read ~0 ms and "reachable" even for sites the tunnel can't reach.
      */
     private fun probeViaSocks5(host: String, port: Int): Int? {
-        val started = System.nanoTime()
         Socket().use { socket ->
             socket.connect(InetSocketAddress(Net.LOCALHOST, Prefs.activeLoopbackSocksPort.toInt()), 5000)
             socket.soTimeout = 15000
@@ -1096,6 +1099,7 @@ class MainActivity :
             val authReply = readOrFail(2) ?: return null
             if (authReply[1].toInt() != 0x00) return null
 
+            val connectStarted = System.nanoTime()
             val hostBytes = host.toByteArray(Charsets.US_ASCII)
             val request = ByteArray(4 + 1 + hostBytes.size + 2)
             request[0] = 0x05
@@ -1120,7 +1124,12 @@ class MainActivity :
             }
             readOrFail(addrLen + 2) ?: return null
 
-            return ((System.nanoTime() - started) / 1_000_000).toInt()
+            // TLS handshake to the site through the tunnel. autoClose=false:
+            // the outer `use` closes the underlying socket.
+            val factory = javax.net.ssl.SSLSocketFactory.getDefault() as javax.net.ssl.SSLSocketFactory
+            (factory.createSocket(socket, host, port, false) as javax.net.ssl.SSLSocket).startHandshake()
+
+            return ((System.nanoTime() - connectStarted) / 1_000_000).toInt()
         }
     }
 

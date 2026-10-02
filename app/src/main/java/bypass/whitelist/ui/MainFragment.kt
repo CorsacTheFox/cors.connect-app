@@ -31,11 +31,13 @@ class MainFragment : Fragment(R.layout.fragment_main_screen), XrayServersListene
             // which auto-detects the type and saves it as a destination.
             bypass.whitelist.tunnel.CallPlatform.isCallLink(scanned) ->
                 AddXraySubscriptionSheet.show(parentFragmentManager, scanned)
-            // Remnawave subscription link (…/sub/<token> or a custom sub
-            // domain): it doubles as an xray subscription feed — the add
-            // sheet imports the servers AND triggers the implicit
-            // Cors.Connect sign-in with the same link.
-            scanned.startsWith("http", ignoreCase = true) && scanned.contains("/sub/") ->
+            // Any other http(s) URL is a subscription link — `…/sub/<token>`
+            // or a custom sub domain like `https://subs.example/<token>` (no
+            // `/sub/` segment, which this used to require). The add sheet
+            // imports the servers AND triggers the implicit Cors.Connect
+            // sign-in with the same link.
+            scanned.startsWith("http://", ignoreCase = true) ||
+                scanned.startsWith("https://", ignoreCase = true) ->
                 AddXraySubscriptionSheet.show(parentFragmentManager, scanned)
             else ->
                 Toast.makeText(requireContext(), R.string.scan_qr_unsupported, Toast.LENGTH_SHORT).show()

@@ -60,7 +60,8 @@ enum class XraySecurity(val wireValue: String) {
 enum class XrayProtocol(val wireValue: String) {
     VLESS("vless"),
     VMESS("vmess"),
-    TROJAN("trojan");
+    TROJAN("trojan"),
+    HYSTERIA2("hysteria");
 
     companion object {
         fun fromWire(value: String): XrayProtocol? =
@@ -77,6 +78,8 @@ enum class XrayProtocol(val wireValue: String) {
  * - VLESS: [uuid] = user id, [encryption] = VLESS encryption ("none").
  * - VMess: [uuid] = user id, [encryption] = user security ("auto", "aes-128-gcm"…).
  * - Trojan: [uuid] = password ([encryption] unused).
+ * - Hysteria2: [uuid] = auth, [security] always TLS, transport is QUIC
+ *   (Xray-core's `network: "hysteria"`, [network] unused).
  */
 data class XrayServer(
     val id: String,
@@ -110,6 +113,12 @@ data class XrayServer(
      * merges itself — see SplitHTTPConfig.Build in `infra/conf`.
      */
     val extra: String = "",
+    /** Hysteria2 `pinSHA256`: hex SHA-256 of the server cert (Xray `pinnedPeerCertSha256`). */
+    val pinSha256: String = "",
+    /** Hysteria2 salamander obfs password (`obfs-password`); blank = no obfs. */
+    val obfsPassword: String = "",
+    /** Hysteria2 port hopping range (`mport`, e.g. "20000-30000"); blank = single port. */
+    val hopPorts: String = "",
     val subscriptionId: String? = null,
     val rawLink: String = "",
 ) {
@@ -141,6 +150,9 @@ data class XrayServer(
         put("headerType", headerType)
         put("seed", seed)
         if (extra.isNotBlank()) put("extra", extra)
+        if (pinSha256.isNotBlank()) put("pinSha256", pinSha256)
+        if (obfsPassword.isNotBlank()) put("obfsPassword", obfsPassword)
+        if (hopPorts.isNotBlank()) put("hopPorts", hopPorts)
         subscriptionId?.let { put("subscriptionId", it) }
         put("rawLink", rawLink)
     }
@@ -191,10 +203,44 @@ data class XrayServer(
                 }
                 outbound.put("settings", JSONObject().put("servers", JSONArray().put(server)))
             }
+            XrayProtocol.HYSTERIA2 -> {
+                outbound.put("settings", JSONObject().apply {
+                    put("version", 2)
+                    put("address", address)
+                    put("port", port)
+                })
+                outbound.put("streamSettings", buildHysteriaStreamSettings())
+                return outbound
+            }
         }
 
         outbound.put("streamSettings", buildStreamSettings())
         return outbound
+    }
+
+    /** Hysteria2 runs over Xray-core's own `hysteria` QUIC transport, always TLS. */
+    private fun buildHysteriaStreamSettings(): JSONObject = JSONObject().apply {
+        put("network", "hysteria")
+        put("security", "tls")
+        put("tlsSettings", JSONObject().apply {
+            put("serverName", sni.ifBlank { address })
+            put("allowInsecure", allowInsecure)
+            put("alpn", JSONArray(alpn.ifBlank { "h3" }.split(",").map { it.trim() }))
+            if (pinSha256.isNotBlank()) put("pinnedPeerCertSha256", pinSha256)
+        })
+        put("hysteriaSettings", JSONObject().apply {
+            put("version", 2)
+            put("auth", uuid)
+            if (hopPorts.isNotBlank()) {
+                put("udphop", JSONObject().put("ports", hopPorts).put("interval", 30))
+            }
+        })
+        if (obfsPassword.isNotBlank()) {
+            put("finalmask", JSONObject().put("udp", JSONArray().put(JSONObject().apply {
+                put("type", "salamander")
+                put("settings", JSONObject().put("password", obfsPassword))
+            })))
+        }
     }
 
     private fun buildStreamSettings(): JSONObject {
@@ -324,6 +370,9 @@ data class XrayServer(
             headerType = o.optString("headerType"),
             seed = o.optString("seed"),
             extra = o.optString("extra"),
+            pinSha256 = o.optString("pinSha256"),
+            obfsPassword = o.optString("obfsPassword"),
+            hopPorts = o.optString("hopPorts"),
             subscriptionId = if (o.has("subscriptionId")) o.optString("subscriptionId") else null,
             rawLink = o.optString("rawLink"),
         )
@@ -358,6 +407,8 @@ data class XrayServer(
                 trimmed.startsWith("vless://", ignoreCase = true) -> parseVless(trimmed, subscriptionId)
                 trimmed.startsWith("vmess://", ignoreCase = true) -> parseVmess(trimmed, subscriptionId)
                 trimmed.startsWith("trojan://", ignoreCase = true) -> parseTrojan(trimmed, subscriptionId)
+                trimmed.startsWith("hysteria2://", ignoreCase = true) -> parseHysteria2(trimmed, "hysteria2://", subscriptionId)
+                trimmed.startsWith("hy2://", ignoreCase = true) -> parseHysteria2(trimmed, "hy2://", subscriptionId)
                 else -> null
             }
         }
@@ -540,6 +591,47 @@ data class XrayServer(
             )
         }
 
+        /**
+         * `hysteria2://auth@host:port/?sni=…&pinSHA256=…&obfs=salamander&obfs-password=…&mport=…#remark`
+         * (also `hy2://`). The host part may carry a port-hopping list
+         * (`host:20000-30000`) — the first port is dialed, the range hops.
+         */
+        private fun parseHysteria2(raw: String, scheme: String, subscriptionId: String?): XrayServer? {
+            // Normalize `host:port/?q` → `host:port?q` and pull out a hop range
+            // in the port slot, which splitHostPort can't parse.
+            var hop = ""
+            val normalized = Regex("""@(\[[^\]]+\]|[^:/?#\[]+):([0-9,\-]+)/?(?=[?#]|$)""")
+                .find(raw)?.let { m ->
+                    val ports = m.groupValues[2]
+                    val first = ports.split(',', '-').first()
+                    if (ports != first) hop = ports
+                    raw.replaceRange(m.range, "@${m.groupValues[1]}:$first")
+                } ?: return null
+            val parts = parseUriShareLink(normalized, scheme) ?: return null
+            val auth = decode(parts.userInfo)
+            if (auth.isEmpty()) return null
+            fun param(key: String) = parts.params[key].orEmpty()
+            val obfs = param("obfs")
+
+            return XrayServer(
+                id = stableServerId(subscriptionId, raw),
+                remark = parts.remark.ifBlank { "${parts.address}:${parts.port}" },
+                protocol = XrayProtocol.HYSTERIA2,
+                address = parts.address,
+                port = parts.port,
+                uuid = auth,
+                security = XraySecurity.TLS,
+                sni = param("sni").ifBlank { param("peer") },
+                alpn = param("alpn"),
+                allowInsecure = param("insecure") == "1" || param("allowInsecure") == "1",
+                pinSha256 = param("pinSHA256").replace(":", "").lowercase(),
+                obfsPassword = if (obfs.isBlank() || obfs.equals("salamander", true)) param("obfs-password") else "",
+                hopPorts = param("mport").ifBlank { hop },
+                subscriptionId = subscriptionId,
+                rawLink = raw,
+            )
+        }
+
         /** Splits `host:port` (or `[ipv6]:port`) into an (address, port) pair. */
         private fun splitHostPort(hostPort: String): Pair<String, Int>? {
             if (hostPort.startsWith("[")) {
@@ -589,4 +681,6 @@ internal fun xrayUrlEncode(text: String): String = URLEncoder.encode(text, "UTF-
 fun String.isSupportedXrayShareLink(): Boolean =
     startsWith("vless://", ignoreCase = true) ||
         startsWith("vmess://", ignoreCase = true) ||
-        startsWith("trojan://", ignoreCase = true)
+        startsWith("trojan://", ignoreCase = true) ||
+        startsWith("hysteria2://", ignoreCase = true) ||
+        startsWith("hy2://", ignoreCase = true)

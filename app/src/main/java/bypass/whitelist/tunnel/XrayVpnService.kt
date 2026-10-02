@@ -624,7 +624,14 @@ class XrayVpnService : VpnService() {
      * `probeViaSocks5`).
      */
     private fun probeServerTcp(server: XrayServer): String? = try {
-        Socket().use { socket ->
+        // Hysteria2 is QUIC over UDP: its port has no TCP listener, so a TCP
+        // connect always fails and used to abort every Hysteria2 connection.
+        // Only check that the host resolves; the end-to-end HTTP check
+        // through the core covers actual reachability.
+        if (server.protocol == bypass.whitelist.xray.XrayProtocol.HYSTERIA2) {
+            java.net.InetAddress.getAllByName(server.address)
+            null
+        } else Socket().use { socket ->
             socket.connect(InetSocketAddress(server.address, server.port), SERVER_PROBE_TIMEOUT_MS)
             null
         }

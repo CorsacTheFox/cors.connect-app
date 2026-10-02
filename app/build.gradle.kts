@@ -7,7 +7,7 @@ plugins {
 
 val versionMajor = 0
 val versionMinor = 5
-val versionPatch = 14
+val versionPatch = 15
 val versionBuild = System.getenv("BUILD_NUMBER")?.toIntOrNull() ?: 0
 
 // Legacy builds (the "0.3" release) already shipped versionCode 1_000_000
@@ -142,6 +142,7 @@ dependencies {
     implementation(libs.androidx.recyclerview)
     implementation(libs.zxing.android.embedded)
     testImplementation(libs.junit)
+    testImplementation("org.json:json:20240303")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }

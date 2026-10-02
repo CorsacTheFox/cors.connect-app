@@ -175,4 +175,42 @@ class XrayEngine(
         if (rtt < 0) throw IllegalStateException("no successful response through the tunnel")
         return rtt
     }
+
+    companion object {
+        /** Real-delay probe target: tiny 204 response, reachable from any exit. */
+        private const val DELAY_TEST_URL = "https://www.gstatic.com/generate_204"
+
+        @Volatile private var envReady = false
+
+        /**
+         * "Real delay" of [server]: spins up a throwaway core with just this
+         * server's outbound and times an HTTP GET through it — the full path
+         * (dial, TLS/REALITY/QUIC handshake, proxy auth, HTTP), unlike a TCP
+         * connect which only proves the port is open (and can't probe UDP
+         * protocols like Hysteria2 at all). Runs in the app process, which is
+         * excluded from the VPN, so it works while connected too.
+         *
+         * Blocking; returns the RTT in ms or null on failure.
+         */
+        fun measureServerDelay(server: XrayServer, assetsDir: File): Int? {
+            if (!envReady) {
+                try {
+                    assetsDir.mkdirs()
+                    Libv2ray.initCoreEnv(assetsDir.absolutePath, "")
+                    envReady = true
+                } catch (_: Throwable) {
+                    return null
+                }
+            }
+            val config = org.json.JSONObject().apply {
+                put("log", org.json.JSONObject().put("loglevel", "none"))
+                put("outbounds", org.json.JSONArray().put(server.toOutboundJson("proxy")))
+            }.toString()
+            return try {
+                Libv2ray.measureOutboundDelay(config, DELAY_TEST_URL).toInt().takeIf { it >= 0 }
+            } catch (_: Throwable) {
+                null
+            }
+        }
+    }
 }

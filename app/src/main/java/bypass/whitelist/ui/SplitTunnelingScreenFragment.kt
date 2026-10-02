@@ -167,41 +167,49 @@ class SplitTunnelingScreenFragment : Fragment() {
             applyFilters()
             return
         }
-        // Cache hit: skip the PackageManager scan entirely — the list renders
-        // immediately with the (possibly still lazy-loading) icons.
-        cachedApps?.let { cache ->
+        // Cache hit: render the cached list immediately, then re-scan in the
+        // background so apps installed/removed since the cache was built show
+        // up (the cache used to live for the whole process and never refresh).
+        val cache = cachedApps
+        if (cache != null) {
             allApps = buildItems(cache)
             showAppsList()
-            return
+        } else {
+            loadingBar.visibility = View.VISIBLE
+            appsListContainer.visibility = View.GONE
         }
-        loadingBar.visibility = View.VISIBLE
-        appsListContainer.visibility = View.GONE
         val ctx = context ?: return
         val pm = ctx.packageManager
         val ownPackage = ctx.packageName
         val act = activity ?: return
         val weakSelf = WeakReference(this)
         Thread {
-            // No GET_META_DATA (nothing here needs meta data) and no per-app
-            // icon loading — both dominated the old load time. Labels still
-            // have to be resolved per app for sorting/filtering.
+            // No GET_META_DATA and no icon loading. Listing packages is cheap;
+            // resolving labels is the slow part, so labels are reused from the
+            // previous scan and only resolved for newly installed apps.
+            val known = cache?.associateBy { it.packageName }.orEmpty()
             val loaded = pm.getInstalledApplications(0)
                 .filter { it.packageName != ownPackage }
                 .mapNotNull { info ->
                     val pkg = info.packageName
                     if (pkg.isBlank()) return@mapNotNull null
-                    val label = info.loadLabel(pm).toString().takeIf { it.isNotBlank() } ?: pkg
-                    CachedApp(pkg, label, (info.flags and ApplicationInfo.FLAG_SYSTEM) == 0)
+                    known[pkg] ?: run {
+                        val label = info.loadLabel(pm).toString().takeIf { it.isNotBlank() } ?: pkg
+                        CachedApp(pkg, label, (info.flags and ApplicationInfo.FLAG_SYSTEM) == 0)
+                    }
                 }
                 .distinctBy { it.packageName }
                 .sortedBy { it.label.lowercase() }
             cachedApps = loaded
+            if (cache != null && loaded.map { it.packageName }.toSet() == known.keys) return@Thread
             if (weakSelf.get() == null) return@Thread
             act.runOnUiThread {
                 val self = weakSelf.get() ?: return@runOnUiThread
                 if (!self.isAdded) return@runOnUiThread
                 self.allApps = self.buildItems(loaded)
-                self.showAppsList()
+                // Already shown from cache: just swap the items in, so the
+                // search/checkbox listeners aren't registered twice.
+                if (cache != null) self.applyFilters() else self.showAppsList()
             }
         }.start()
     }
