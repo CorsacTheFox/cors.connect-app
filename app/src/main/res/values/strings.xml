@@ -460,4 +460,5 @@
     <string name="sub_logout_sub">Your subscription and servers stay in the app</string>
     <string name="push_channel">Announcements</string>
     <string name="sub_continue">Continue</string>
+    <string name="main_pull_hint">Pull down to refresh the list</string>
 </resources>

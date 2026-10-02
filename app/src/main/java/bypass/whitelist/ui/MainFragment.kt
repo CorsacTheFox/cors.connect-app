@@ -99,6 +99,10 @@ class MainFragment : Fragment(R.layout.fragment_main_screen), XrayServersListene
         container.onAddCallClicked = { AddXraySubscriptionSheet.show(parentFragmentManager) }
         container.onRefreshSubscriptionsClicked = { refreshSubscriptions() }
         container.onPingCheckClicked = { content?.invalidatePings() }
+        container.onPullToRefresh = {
+            content?.invalidatePings()
+            if (Prefs.xraySubscriptions.isEmpty()) content?.stopPullRefresh() else refreshSubscriptions()
+        }
         container.onScanQrClicked = {
             scanQrLauncher.launch(
                 ScanOptions()
@@ -294,12 +298,14 @@ class MainFragment : Fragment(R.layout.fragment_main_screen), XrayServersListene
         val view = content ?: return
         if (Prefs.xraySubscriptions.isEmpty()) {
             Toast.makeText(requireContext(), R.string.xray_refresh_none, Toast.LENGTH_SHORT).show()
+            view.stopPullRefresh()
             return
         }
         view.showSubscriptionsRefreshing()
         XraySubscriptionRefresher.refreshAll { result ->
             if (!isAdded) return@refreshAll
             view.stopSubscriptionsRefreshing()
+            view.stopPullRefresh()
             view.bindXrayServers(Prefs.xraySavedServers, Prefs.xrayActiveServerId)
             // The refresh may have brought fresh quota numbers (traffic/expiry).
             updateSubscriptionStats()

@@ -465,4 +465,5 @@
     <string name="sub_logout_sub">Подписка и серверы в приложении останутся</string>
     <string name="push_channel">Новости и уведомления</string>
     <string name="sub_continue">Продолжить</string>
+    <string name="main_pull_hint">Потяните вниз для обновления списка</string>
 </resources>

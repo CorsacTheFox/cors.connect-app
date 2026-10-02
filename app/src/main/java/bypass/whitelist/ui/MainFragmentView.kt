@@ -88,6 +88,7 @@ class MainFragmentView(private val root: View) {
     var onAddCallClicked: Callback? = null
     var onScanQrClicked: Callback? = null
     var onRefreshSubscriptionsClicked: Callback? = null
+    var onPullToRefresh: Callback? = null
     var onPingCheckClicked: Callback? = null
     var onHeroPressed: Callback? = null
     var onServiceCheckPressed: Callback? = null
@@ -142,6 +143,11 @@ class MainFragmentView(private val root: View) {
         addButton.setOnClickListener { onAddCallClicked?.invoke() }
         scanButton.setOnClickListener { onScanQrClicked?.invoke() }
         refreshButton.setOnClickListener { onRefreshSubscriptionsClicked?.invoke() }
+        (mainListScroll as androidx.swiperefreshlayout.widget.SwipeRefreshLayout).apply {
+            setColorSchemeColors(root.context.getColor(R.color.accent_emerald))
+            setProgressBackgroundColorSchemeColor(root.context.getColor(R.color.panel_2))
+            setOnRefreshListener { onPullToRefresh?.invoke() }
+        }
         pingCheckButton.setOnClickListener { onPingCheckClicked?.invoke() }
         emptyCta.setOnClickListener { onAddCallClicked?.invoke() }
         connectBar.setOnClickListener { v ->
@@ -752,9 +758,7 @@ class MainFragmentView(private val root: View) {
 
     private fun updateHeaderSub() {
         if (collapsedToActive) return
-        // +1 for the always-present Whitelist Bypass entry.
-        val count = 1 + currentServers.size
-        headerSub.text = root.context.resources.getQuantityString(R.plurals.main_sub_count, count, count)
+        headerSub.text = root.context.getString(R.string.main_pull_hint)
     }
 
     private fun resetPingState() {
@@ -866,5 +870,10 @@ class MainFragmentView(private val root: View) {
             addUpdateListener { apply(it.animatedValue as Float) }
             start()
         }
+    }
+
+    /** Stops the pull-to-refresh spinner (see [onPullToRefresh]). */
+    fun stopPullRefresh() {
+        (mainListScroll as androidx.swiperefreshlayout.widget.SwipeRefreshLayout).isRefreshing = false
     }
 }
