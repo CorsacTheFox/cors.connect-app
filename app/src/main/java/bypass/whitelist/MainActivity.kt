@@ -276,6 +276,12 @@ class MainActivity :
         ProxyService.onDisconnect = { runOnUiThread { onDisconnectFromService() } }
         XrayVpnService.onDisconnect = { runOnUiThread { onDisconnectFromService() } }
 
+        // Someone who already has a subscription or a cabinet session is past
+        // onboarding even if they never tapped its buttons (e.g. the app was
+        // reopened by a corsconnect://add link from the bot).
+        if (!Prefs.onboardingDone && (Prefs.xraySubscriptions.isNotEmpty() || bypass.whitelist.cabinet.CabinetApi.signedIn)) {
+            Prefs.onboardingDone = true
+        }
         if (!Prefs.onboardingDone && savedInstanceState == null) {
             showOnboarding()
         } else if (CALL_LINK.isNotEmpty() && !TunnelServiceState.isAnyTunnelComponentRunning(this)) {
@@ -589,7 +595,18 @@ class MainActivity :
         mainFragment()?.onDestinationsChanged()
     }
 
+    override fun onOnboardingSignedIn() {
+        selectNavTab(R.id.navServers)
+    }
+
     override fun onXrayServersChanged() {
+        // A subscription landed while onboarding is still up — close it.
+        if (Prefs.xraySubscriptions.isNotEmpty() &&
+            supportFragmentManager.findFragmentById(R.id.joinOverlayContainer) is OnboardingFragment
+        ) {
+            Prefs.onboardingDone = true
+            onOnboardingFinished()
+        }
         // Broadcast to every live listener, not just the Main tab: the Servers
         // tab (a sibling pager page) and any pushed sub-page also need to
         // rebuild their lists right after a subscription import — otherwise
