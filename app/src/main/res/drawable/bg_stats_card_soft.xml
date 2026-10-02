@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Settings-card surface at 65% opacity (35% transparent) — Subscription tab frames. -->
+<!-- Subscription tab frames: same look as an unselected server row
+     (row_bg + hairline at 40% opacity, see MainFragmentView.applyRowActiveState). -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="#A615161F" />
-    <stroke android:width="1dp" android:color="@color/hair_ink" />
+    <solid android:color="#661E2130" />
+    <stroke android:width="1dp" android:color="#07E9E9ED" />
     <corners android:radius="8dp" />
 </shape>
