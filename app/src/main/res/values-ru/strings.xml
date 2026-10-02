@@ -453,4 +453,14 @@
     <string name="sub_history_empty">Пополнений пока не было</string>
     <string name="sub_history_pending">ожидает оплаты</string>
     <plurals name="sub_days_left"><item quantity="one">Осталось %d день</item><item quantity="few">Осталось %d дня</item><item quantity="many">Осталось %d дней</item><item quantity="other">Осталось %d дня</item></plurals>
+    <string name="sub_devices_title">Устройства</string>
+    <string name="sub_devices_empty">Подключённых устройств нет</string>
+    <string name="sub_device_this">ЭТО</string>
+    <string name="sub_device_rename">Переименовать</string>
+    <string name="sub_device_delete">Отвязать устройство</string>
+    <string name="sub_device_delete_sub">Устройство освободит слот; при следующем подключении оно привяжется снова</string>
+    <string name="sub_device_name">Название</string>
+    <string name="sub_device_delete_q">Отвязать «%1$s»?</string>
+    <string name="sub_logout_q">Выйти из аккаунта?</string>
+    <string name="sub_logout_sub">Подписка и серверы в приложении останутся</string>
 </resources>

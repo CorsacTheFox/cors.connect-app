@@ -242,6 +242,23 @@
                     android:layout_marginEnd="0dp"
                     android:text="@string/sub_topup" />
 
+                <!-- Devices -->
+                <TextView
+                    android:id="@+id/subDevicesLabel"
+                    style="@style/StatLabel"
+                    android:layout_marginTop="18dp"
+                    android:text="@string/sub_devices_title" />
+
+                <LinearLayout
+                    android:id="@+id/subDevicesList"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_service_row"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="4dp" />
+
                 <!-- Top-up history -->
                 <TextView
                     style="@style/StatLabel"

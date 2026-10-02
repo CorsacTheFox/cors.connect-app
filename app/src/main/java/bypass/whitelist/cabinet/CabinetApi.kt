@@ -113,6 +113,18 @@ object CabinetApi {
 
     fun purchaseOptions(): JSONObject = expect(call("GET", "/subscription/purchase-options", auth = true))
 
+    /** `{devices: [{hwid, platform, device_model, created_at, local_name}], total, device_limit}` */
+    fun devices(): JSONObject = expect(call("GET", "/subscription/devices", auth = true))
+
+    fun deleteDevice(hwid: String) {
+        expect(call("DELETE", "/subscription/devices/" + java.net.URLEncoder.encode(hwid, "UTF-8"), auth = true))
+    }
+
+    fun renameDevice(hwid: String, name: String) {
+        expect(call("PATCH", "/subscription/devices/" + java.net.URLEncoder.encode(hwid, "UTF-8") + "/name",
+            JSONObject().put("name", name.ifBlank { JSONObject.NULL }), auth = true))
+    }
+
     /** Latest balance top-ups (`type=deposit`), newest first. */
     fun deposits(): JSONArray =
         expect(call("GET", "/balance/transactions?page=1&per_page=20&type=deposit", auth = true)).optJSONArray("items") ?: JSONArray()
@@ -160,6 +172,7 @@ object CabinetApi {
         if (rt.isEmpty()) return false
         val r = raw("POST", "/auth/refresh", JSONObject().put("refresh_token", rt), null)
         if (!r.ok) {
+            android.util.Log.w("CabinetApi", "refresh failed: HTTP ${r.code} ${r.errorMessage}")
             // Refresh token rejected — the session is gone.
             if (r.code == 401 || r.code == 403) {
                 Prefs.cabinetAccessToken = ""

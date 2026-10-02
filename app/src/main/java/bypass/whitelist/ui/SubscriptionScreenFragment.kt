@@ -48,6 +48,7 @@ class SubscriptionScreenFragment : Fragment(R.layout.fragment_subscription_scree
         val renewals: List<JSONObject>,
         val tariffs: List<JSONObject>,
         val history: List<JSONObject>,
+        val devices: JSONObject?,
     )
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -65,9 +66,12 @@ class SubscriptionScreenFragment : Fragment(R.layout.fragment_subscription_scree
         }
         view.findViewById<View>(R.id.subTopUp).setOnClickListener { askTopUp() }
         view.findViewById<View>(R.id.subLogout).setOnClickListener {
-            thread(isDaemon = true) {
-                CabinetApi.signOut()
-                main.post { state = null; reload() }
+            ConfirmActionSheet.show(parentFragmentManager, getString(R.string.sub_logout_q), getString(R.string.sub_logout_sub),
+                getString(R.string.sub_logout), getString(android.R.string.cancel), destructive = true) {
+                thread(isDaemon = true) {
+                    CabinetApi.signOut()
+                    main.post { state = null; reload() }
+                }
             }
         }
         render()
@@ -126,7 +130,8 @@ class SubscriptionScreenFragment : Fragment(R.layout.fragment_subscription_scree
                     val a = CabinetApi.deposits()
                     (0 until a.length()).map { a.getJSONObject(it) }
                 }.getOrDefault(emptyList())
-                State(CabinetApi.me(), subscription, CabinetApi.balanceKopeks(), renewals, tariffs, history)
+                val devices = if (subscription != null) runCatching { CabinetApi.devices() }.getOrNull() else null
+                State(CabinetApi.me(), subscription, CabinetApi.balanceKopeks(), renewals, tariffs, history, devices)
             }
             main.post {
                 loading = false
@@ -178,6 +183,88 @@ class SubscriptionScreenFragment : Fragment(R.layout.fragment_subscription_scree
         renderStatus(v, s)
         renderBuy(v, s)
         renderHistory(v.findViewById(R.id.subHistory), s.history)
+        val hasDevices = s.subscription != null
+        v.findViewById<View>(R.id.subDevicesLabel).visibility = if (hasDevices) View.VISIBLE else View.GONE
+        v.findViewById<LinearLayout>(R.id.subDevicesList).apply {
+            visibility = if (hasDevices) View.VISIBLE else View.GONE
+            renderDevices(this, s.devices)
+        }
+    }
+
+    private fun renderDevices(box: LinearLayout, data: JSONObject?) {
+        box.removeAllViews()
+        val ctx = requireContext()
+        val arr = data?.optJSONArray("devices")
+        if (arr == null || arr.length() == 0) {
+            box.addView(TextView(ctx).apply {
+                text = getString(R.string.sub_devices_empty)
+                setTextColor(ctx.getColor(R.color.ink_3))
+                textSize = 12f
+                setPadding(0, dp(10), 0, dp(10))
+            })
+            return
+        }
+        val inFmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
+        val outFmt = SimpleDateFormat("dd.MM.yy HH:mm", Locale.getDefault())
+        for (i in 0 until arr.length()) {
+            val d = arr.getJSONObject(i)
+            val hwid = d.optString("hwid")
+            val name = d.optString("local_name").takeIf { it.isNotBlank() && it != "null" }
+                ?: d.optString("device_model").ifBlank { hwid.take(8) }
+            val isThis = hwid == Prefs.deviceHwid
+            if (i > 0) box.addView(View(ctx).apply { setBackgroundColor(ctx.getColor(R.color.hair)) }, LinearLayout.LayoutParams(-1, 1))
+            val row = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(0, dp(9), 0, dp(9))
+                isClickable = true
+                setOnClickListener { deviceActions(hwid, name) }
+            }
+            val left = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+            left.addView(TextView(ctx).apply {
+                text = name
+                setTextColor(ctx.getColor(R.color.ink))
+                textSize = 12.5f
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+            })
+            left.addView(TextView(ctx).apply {
+                val seen = runCatching { outFmt.format(inFmt.parse(d.getString("created_at").take(19))!!) }.getOrDefault("")
+                text = listOf(d.optString("platform"), seen).filter { it.isNotBlank() }.joinToString(" · ")
+                typeface = android.graphics.Typeface.MONOSPACE
+                setTextColor(ctx.getColor(R.color.ink_3))
+                textSize = 10f
+            })
+            row.addView(left, LinearLayout.LayoutParams(0, -2, 1f))
+            row.addView(TextView(ctx).apply {
+                text = if (isThis) getString(R.string.sub_device_this) else "⋯"
+                typeface = android.graphics.Typeface.MONOSPACE
+                setTextColor(ctx.getColor(if (isThis) R.color.accent_emerald else R.color.ink_3))
+                textSize = if (isThis) 10f else 14f
+                setPadding(dp(8), 0, 0, 0)
+            })
+            box.addView(row)
+        }
+    }
+
+    private fun deviceActions(hwid: String, name: String) {
+        val opts = listOf(
+            ChoiceActionSheet.Option("rename", getString(R.string.sub_device_rename)),
+            ChoiceActionSheet.Option("delete", getString(R.string.sub_device_delete), getString(R.string.sub_device_delete_sub)),
+        )
+        ChoiceActionSheet.show(parentFragmentManager, name, null, opts, null) { o ->
+            when (o.id) {
+                "rename" -> InputActionSheet.show(parentFragmentManager, getString(R.string.sub_device_rename), null,
+                    getString(R.string.sub_device_name), name) { newName ->
+                    runIo({ CabinetApi.renameDevice(hwid, newName.trim()) }) { reload() }
+                }
+                "delete" -> ConfirmActionSheet.show(parentFragmentManager, getString(R.string.sub_device_delete_q, name),
+                    getString(R.string.sub_device_delete_sub), getString(R.string.sub_device_delete),
+                    getString(android.R.string.cancel), destructive = true) {
+                    runIo({ CabinetApi.deleteDevice(hwid) }) { toast(getString(R.string.sub_done)); reload() }
+                }
+            }
+        }
     }
 
     private fun renderOtherLogins(box: LinearLayout) {
@@ -226,7 +313,9 @@ class SubscriptionScreenFragment : Fragment(R.layout.fragment_subscription_scree
                 visibility = if (limit > 0) View.VISIBLE else View.GONE
                 progress = sub.optDouble("traffic_used_percent", 0.0).toInt()
             }
-            v.findViewById<TextView>(R.id.subDevices).text = sub.optInt("device_limit").toString()
+            val count = s.devices?.optInt("total", -1) ?: -1
+            v.findViewById<TextView>(R.id.subDevices).text =
+                if (count >= 0) "$count/${sub.optInt("device_limit")}" else sub.optInt("device_limit").toString()
             val url = sub.optString("subscription_url")
             if (url.isNotBlank() && Prefs.xraySubscriptions.none { subKey(it.url) == subKey(url) }) {
                 addServers.visibility = View.VISIBLE

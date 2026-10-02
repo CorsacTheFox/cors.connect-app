@@ -448,4 +448,14 @@
     <string name="sub_history_empty">No top-ups yet</string>
     <string name="sub_history_pending">awaiting payment</string>
     <plurals name="sub_days_left"><item quantity="one">%d day left</item><item quantity="other">%d days left</item></plurals>
+    <string name="sub_devices_title">Devices</string>
+    <string name="sub_devices_empty">No connected devices</string>
+    <string name="sub_device_this">THIS</string>
+    <string name="sub_device_rename">Rename</string>
+    <string name="sub_device_delete">Unlink device</string>
+    <string name="sub_device_delete_sub">Frees a slot; the device re-links on its next connection</string>
+    <string name="sub_device_name">Name</string>
+    <string name="sub_device_delete_q">Unlink “%1$s”?</string>
+    <string name="sub_logout_q">Sign out?</string>
+    <string name="sub_logout_sub">Your subscription and servers stay in the app</string>
 </resources>
