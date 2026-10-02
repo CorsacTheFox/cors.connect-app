@@ -133,6 +133,8 @@ class SubscriptionScreenFragment : Fragment(R.layout.fragment_subscription_scree
                 val devices = if (subscription != null) runCatching { CabinetApi.devices() }.getOrNull() else null
                 State(CabinetApi.me(), subscription, CabinetApi.balanceKopeks(), renewals, tariffs, history, devices)
             }
+            result.getOrNull()?.subscription?.optString("subscription_url")
+                ?.takeIf { it.isNotBlank() }?.let { autoImport(it) }
             main.post {
                 loading = false
                 view?.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(R.id.subRefresh)?.isRefreshing = false
@@ -477,6 +479,49 @@ class SubscriptionScreenFragment : Fragment(R.layout.fragment_subscription_scree
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+
+    /**
+     * Signed in through the cabinet but no Xray subscription in the app yet:
+     * import the account's subscription link automatically (servers + the
+     * silent Cors.Connect sign-in the link doubles as). Blocking — called
+     * from the reload worker thread.
+     */
+    private fun autoImport(url: String) {
+        if (Prefs.xraySubscriptions.isNotEmpty()) return
+        val sub = bypass.whitelist.xray.XraySubscription.newWith(
+            name = bypass.whitelist.xray.XraySubscription.suggestNameFor(url),
+            url = url,
+        )
+        val result = runCatching { bypass.whitelist.xray.XraySubscriptionManager.fetchWithUserInfo(url, sub.id) }.getOrNull()
+        if (result == null || result.servers.isEmpty()) return
+        val act = activity ?: return
+        act.runOnUiThread {
+            if (Prefs.xraySubscriptions.isNotEmpty()) return@runOnUiThread
+            Prefs.addOrUpdateXraySubscription(
+                sub.copy(
+                    lastUpdatedMs = System.currentTimeMillis(),
+                    lastServerCount = result.servers.size,
+                    usedBytes = result.userInfo?.usedBytes ?: 0L,
+                    totalBytes = result.userInfo?.totalBytes ?: 0L,
+                    expireAtSec = result.userInfo?.expireAtSec ?: 0L,
+                ),
+            )
+            Prefs.replaceSubscriptionServers(sub.id, result.servers)
+            (act as? XrayServersListener)?.onXrayServersChanged()
+            android.widget.Toast.makeText(
+                act,
+                act.resources.getQuantityString(R.plurals.xray_toast_subscription_imported, result.servers.size, result.servers.size),
+                android.widget.Toast.LENGTH_SHORT,
+            ).show()
+            if (isAdded) view?.findViewById<TextView>(R.id.subLinksCount)?.text = Prefs.xraySubscriptions.size.toString()
+        }
+        if (Prefs.corsSessionToken.isBlank()) {
+            val username = cc.cors.connect.cors.LinkAuth.trySignIn(url)
+            if (username != null) act.runOnUiThread {
+                (act as? cc.cors.connect.cors.LinkAuth.Listener)?.onCorsSignedIn(username)
+            }
+        }
+    }
 
     // ---- flows ---------------------------------------------------------
 
