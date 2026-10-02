@@ -383,5 +383,4 @@
     <string name="ob_step_4_title">Pick a connection</string>
     <string name="ob_step_4_sub">Whitelist Bypass or a server from the subscription</string>
     <string name="ob_free_note">Without a subscription, Whitelist Bypass runs for 5 minutes, then the session drops. Sign in with Telegram to remove the limit.</string>
-    <string name="node_load_row">Load %1$d%% · Channel %2$.1f MB/s · CPU %3$d%% · Node connections %4$d</string>
 </resources>

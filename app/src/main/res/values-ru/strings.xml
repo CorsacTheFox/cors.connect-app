@@ -388,5 +388,4 @@
     <string name="ob_free_note">Без подписки обход белых списков доступен на 5 минут, затем сессия обрывается. Войдите через Telegram, чтобы снять ограничение.</string>
     <string name="auth_required_hint">Без авторизации обход вайтлистов работает 5 минут, затем сессия обрывается — добавьте подписку</string>
     <string name="auth_hint_bot_link">Открыть @corsxray2bot</string>
-    <string name="node_load_row">Загрузка %1$d%% · канал %2$.1f МБ/с · CPU %3$d%% · подключений к ноде %4$d</string>
 </resources>

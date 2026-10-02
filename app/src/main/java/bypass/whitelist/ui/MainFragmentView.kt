@@ -555,8 +555,8 @@ class MainFragmentView(private val root: View) {
         pingView.visibility = View.VISIBLE
         pingServers[server.id] = server
         bindPing(pingView, server.id, server.address, server.port)
-        nodeLoadRows[server.address] = row
-        bindRowLoad(row, nodeLoads[server.address])
+        nodeLoadRows[server.id] = row
+        bindRowLoad(row, nodeLoads[nodeLoadKey(server)])
 
         applyRowActiveState(row, nameView, linkView, protocolView, statusDot, isActive, context)
     }
@@ -758,7 +758,7 @@ class MainFragmentView(private val root: View) {
     /** Fetches node load for every listed Xray server and updates their rows in place. */
     private fun refreshNodeLoad() {
         if (nodeLoadInFlight) return
-        val hosts = currentServers.map { it.address }
+        val hosts = currentServers.map { nodeLoadKey(it) }
         if (hosts.isEmpty()) return
         nodeLoadInFlight = true
         thread(isDaemon = true) {
@@ -767,16 +767,19 @@ class MainFragmentView(private val root: View) {
                 nodeLoadInFlight = false
                 nodeLoads.clear()
                 nodeLoads.putAll(loads)
-                for ((host, row) in nodeLoadRows) bindRowLoad(row, nodeLoads[host])
+                for (server in currentServers) {
+                    nodeLoadRows[server.id]?.let { bindRowLoad(it, nodeLoads[nodeLoadKey(server)]) }
+                }
             }
         }
     }
 
+    /** host:port — the port tells relay-forwarded servers on a shared host apart. */
+    private fun nodeLoadKey(server: XrayServer) = "${server.address}:${server.port}"
+
     private fun bindRowLoad(row: View, load: NodeLoadClient.NodeLoad?) {
-        val text = row.findViewById<TextView>(R.id.rowLoad)
         val bar = row.findViewById<android.widget.ProgressBar>(R.id.rowLoadBar)
         if (load == null) {
-            text.visibility = View.GONE
             bar.visibility = View.GONE
             return
         }
@@ -787,12 +790,8 @@ class MainFragmentView(private val root: View) {
                 else -> R.color.ok_green
             }
         )
-        text.text = row.context.getString(
-            R.string.node_load_row, load.load, load.rxMBps + load.txMBps, load.cpuLoad, load.clients
-        )
         bar.progress = load.load
         bar.progressTintList = android.content.res.ColorStateList.valueOf(color)
-        text.visibility = View.VISIBLE
         bar.visibility = View.VISIBLE
     }
 }
