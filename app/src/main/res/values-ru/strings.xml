@@ -442,4 +442,15 @@
     <plurals name="sub_months"><item quantity="one">%d месяц</item><item quantity="few">%d месяца</item><item quantity="many">%d месяцев</item><item quantity="other">%d месяца</item></plurals>
     <plurals name="sub_years"><item quantity="one">%d год</item><item quantity="few">%d года</item><item quantity="many">%d лет</item><item quantity="other">%d года</item></plurals>
     <plurals name="sub_days_plural"><item quantity="one">%d день</item><item quantity="few">%d дня</item><item quantity="many">%d дней</item><item quantity="other">%d дня</item></plurals>
+    <string name="sub_open_bot_link">Управлять подпиской в Telegram-боте</string>
+    <string name="sub_signed_out_status">Аккаунт не подключён</string>
+    <string name="sub_signed_out_title">Управление подпиской</string>
+    <string name="sub_signed_out_detail">Продление, покупка и баланс прямо в приложении</string>
+    <string name="sub_login_email_short">Email</string>
+    <string name="sub_choose_tariff">Выберите тариф</string>
+    <string name="sub_renew_title">Продлите подписку</string>
+    <string name="sub_history">История пополнений</string>
+    <string name="sub_history_empty">Пополнений пока не было</string>
+    <string name="sub_history_pending">ожидает оплаты</string>
+    <plurals name="sub_days_left"><item quantity="one">Осталось %d день</item><item quantity="few">Осталось %d дня</item><item quantity="many">Осталось %d дней</item><item quantity="other">Осталось %d дня</item></plurals>
 </resources>

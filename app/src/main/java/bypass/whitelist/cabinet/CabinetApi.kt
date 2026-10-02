@@ -113,6 +113,10 @@ object CabinetApi {
 
     fun purchaseOptions(): JSONObject = expect(call("GET", "/subscription/purchase-options", auth = true))
 
+    /** Latest balance top-ups (`type=deposit`), newest first. */
+    fun deposits(): JSONArray =
+        expect(call("GET", "/balance/transactions?page=1&per_page=20&type=deposit", auth = true)).optJSONArray("items") ?: JSONArray()
+
     fun paymentMethods(): JSONArray = expectArr(call("GET", "/balance/payment-methods", auth = true))
 
     /** Throws [ApiException] whose response has HTTP 402 + `detail.missing_amount` when the balance is short. */

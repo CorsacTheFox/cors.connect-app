@@ -140,6 +140,7 @@ dependencies {
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.viewpager2)
     implementation(libs.androidx.recyclerview)
+    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
     implementation(libs.zxing.android.embedded)
     testImplementation(libs.junit)
     testImplementation("org.json:json:20240303")

@@ -437,4 +437,15 @@
     <plurals name="sub_months"><item quantity="one">%d month</item><item quantity="other">%d months</item></plurals>
     <plurals name="sub_years"><item quantity="one">%d year</item><item quantity="other">%d years</item></plurals>
     <plurals name="sub_days_plural"><item quantity="one">%d day</item><item quantity="other">%d days</item></plurals>
+    <string name="sub_open_bot_link">Manage the subscription in the Telegram bot</string>
+    <string name="sub_signed_out_status">No account linked</string>
+    <string name="sub_signed_out_title">Manage subscription</string>
+    <string name="sub_signed_out_detail">Renew, buy and top up right in the app</string>
+    <string name="sub_login_email_short">Email</string>
+    <string name="sub_choose_tariff">Choose a plan</string>
+    <string name="sub_renew_title">Renew your subscription</string>
+    <string name="sub_history">Top-up history</string>
+    <string name="sub_history_empty">No top-ups yet</string>
+    <string name="sub_history_pending">awaiting payment</string>
+    <plurals name="sub_days_left"><item quantity="one">%d day left</item><item quantity="other">%d days left</item></plurals>
 </resources>

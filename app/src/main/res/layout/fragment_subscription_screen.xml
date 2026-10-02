@@ -1,0 +1,359 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- "Subscription" tab — same visual language as the main screen: monospace
+     caps labels, a typographic headline, grouped cards. Bound by
+     SubscriptionScreenFragment; signed-in / signed-out blocks toggle. -->
+<androidx.swiperefreshlayout.widget.SwipeRefreshLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/subRefresh"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true"
+        android:overScrollMode="never"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="16dp"
+            android:paddingTop="14dp"
+            android:paddingBottom="18dp">
+
+            <!-- Header: account label -->
+            <TextView
+                android:id="@+id/subHeader"
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:ellipsize="end"
+                android:fontFamily="monospace"
+                android:gravity="center_vertical"
+                android:letterSpacing="0.18"
+                android:maxLines="1"
+                android:textAllCaps="true"
+                android:textColor="@color/ink_3"
+                android:textSize="10sp"
+                tools:text="\@username" />
+
+            <TextView
+                android:id="@+id/subStatusLine"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.18"
+                android:textAllCaps="true"
+                android:textColor="@color/accent_emerald"
+                android:textSize="10sp"
+                tools:text="Активна · до 12.11.2026" />
+
+            <TextView
+                android:id="@+id/subTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/ink"
+                android:textFontWeight="500"
+                android:textSize="24sp"
+                tools:text="61 день" />
+
+            <TextView
+                android:id="@+id/subDetail"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:fontFamily="monospace"
+                android:textColor="@color/ink_3"
+                android:textSize="11sp"
+                android:visibility="gone" />
+
+            <!-- ========== Signed out ========== -->
+            <LinearLayout
+                android:id="@+id/subSignedOut"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:id="@+id/subLoginTelegram"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:background="@drawable/bg_cors_connect_button"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_marginEnd="9dp"
+                        android:src="@drawable/ic_telegram"
+                        android:tint="@color/accent_emerald" />
+
+                    <TextView
+                        android:id="@+id/subLoginTelegramLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:letterSpacing="0.12"
+                        android:text="@string/sub_login_telegram"
+                        android:textAllCaps="true"
+                        android:textColor="@color/accent_emerald"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <!-- Other cabinet sign-in methods (email + OAuth), filled in code -->
+                <LinearLayout
+                    android:id="@+id/subLoginOther"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal" />
+
+                <TextView
+                    android:id="@+id/subOpenBot"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="12dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:padding="4dp"
+                    android:text="@string/sub_open_bot_link"
+                    android:textColor="@color/accent_emerald"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <!-- ========== Signed in ========== -->
+            <LinearLayout
+                android:id="@+id/subSignedIn"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <!-- Stats card: traffic / devices / balance -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:background="@drawable/bg_service_row"
+                    android:orientation="vertical"
+                    android:padding="12dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:baselineAligned="false"
+                        android:orientation="horizontal">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView style="@style/StatLabel" android:text="@string/sub_traffic" />
+
+                            <TextView
+                                android:id="@+id/subTraffic"
+                                style="@style/RouteStatValue"
+                                tools:text="3,5 / ∞ GB" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView style="@style/StatLabel" android:text="@string/sub_devices" />
+
+                            <TextView
+                                android:id="@+id/subDevices"
+                                style="@style/RouteStatValue"
+                                tools:text="3" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView style="@style/StatLabel" android:text="@string/sub_section_balance" />
+
+                            <TextView
+                                android:id="@+id/subBalance"
+                                style="@style/RouteStatValue"
+                                tools:text="150 ₽" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <ProgressBar
+                        android:id="@+id/subTrafficBar"
+                        style="?android:attr/progressBarStyleHorizontal"
+                        android:layout_width="match_parent"
+                        android:layout_height="3dp"
+                        android:layout_marginTop="10dp"
+                        android:max="100"
+                        android:progressBackgroundTint="@color/hair_strong"
+                        android:progressTint="@color/accent_emerald"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <!-- Import the cabinet subscription's servers (when missing) -->
+                <TextView
+                    android:id="@+id/subAddServers"
+                    style="@style/QuickChip"
+                    android:layout_width="match_parent"
+                    android:layout_height="34dp"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginEnd="0dp"
+                    android:text="@string/sub_add_servers"
+                    android:visibility="gone" />
+
+                <!-- Renew / buy: period cards, two per row, filled in code -->
+                <TextView
+                    android:id="@+id/subBuyLabel"
+                    style="@style/StatLabel"
+                    android:layout_marginTop="18dp"
+                    android:text="@string/sub_section_renew" />
+
+                <LinearLayout
+                    android:id="@+id/subBuyGrid"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="vertical" />
+
+                <TextView
+                    android:id="@+id/subTopUp"
+                    style="@style/QuickChip"
+                    android:layout_width="match_parent"
+                    android:layout_height="34dp"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginEnd="0dp"
+                    android:text="@string/sub_topup" />
+
+                <!-- Top-up history -->
+                <TextView
+                    style="@style/StatLabel"
+                    android:layout_marginTop="18dp"
+                    android:text="@string/sub_history" />
+
+                <LinearLayout
+                    android:id="@+id/subHistory"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_service_row"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="4dp" />
+            </LinearLayout>
+
+            <!-- Subscription links (works with or without an account) -->
+            <TextView
+                style="@style/StatLabel"
+                android:layout_marginTop="18dp"
+                android:text="@string/sub_section_links" />
+
+            <LinearLayout
+                android:id="@+id/subLinks"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_destination_card"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="13dp"
+                android:paddingVertical="10dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/sub_links_manage"
+                        android:textColor="@color/ink"
+                        android:textFontWeight="600"
+                        android:textSize="13.5sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="@string/sub_links_manage_sub"
+                        android:textColor="@color/ink_3"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/subLinksCount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:textColor="@color/ink_3"
+                    android:textSize="12sp"
+                    tools:text="1" />
+            </LinearLayout>
+
+            <!-- Account actions (signed in) -->
+            <LinearLayout
+                android:id="@+id/subAccountRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/subOpenCabinet"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:padding="6dp"
+                    android:text="@string/sub_open_cabinet"
+                    android:textColor="@color/accent_emerald"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/subOpenBotSignedIn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="14dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:padding="6dp"
+                    android:text="@string/sub_open_bot"
+                    android:textColor="@color/accent_emerald"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/subLogout"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="14dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:padding="6dp"
+                    android:text="@string/sub_logout"
+                    android:textColor="@color/error_red"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+</androidx.swiperefreshlayout.widget.SwipeRefreshLayout>

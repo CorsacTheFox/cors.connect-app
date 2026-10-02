@@ -28,9 +28,8 @@ import kotlin.concurrent.thread
  * subscription-link management that works without any account. Signed in:
  * status, renewal / tariff purchase, balance top-up via the cabinet API.
  */
-class SubscriptionScreenFragment : Fragment(R.layout.fragment_settings_screen) {
+class SubscriptionScreenFragment : Fragment(R.layout.fragment_subscription_screen) {
 
-    private lateinit var ui: SettingsUi
     private val main = Handler(Looper.getMainLooper())
 
     /** Last loaded account snapshot; null while loading / signed out. */
@@ -48,10 +47,29 @@ class SubscriptionScreenFragment : Fragment(R.layout.fragment_settings_screen) {
         val balanceKopeks: Long,
         val renewals: List<JSONObject>,
         val tariffs: List<JSONObject>,
+        val history: List<JSONObject>,
     )
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        ui = SettingsUi(this)
+        view.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(R.id.subRefresh).apply {
+            setColorSchemeColors(requireContext().getColor(R.color.accent_emerald))
+            setProgressBackgroundColorSchemeColor(requireContext().getColor(R.color.panel_2))
+            setOnRefreshListener { reload() }
+        }
+        view.findViewById<View>(R.id.subLoginTelegram).setOnClickListener { startTelegramLogin() }
+        view.findViewById<View>(R.id.subOpenBot).setOnClickListener { openUrl(BOT_URL) }
+        view.findViewById<View>(R.id.subOpenBotSignedIn).setOnClickListener { openUrl(BOT_URL) }
+        view.findViewById<View>(R.id.subOpenCabinet).setOnClickListener { openUrl(CabinetApi.CABINET_URL) }
+        view.findViewById<View>(R.id.subLinks).setOnClickListener {
+            (activity as? MainActivityHost)?.pushSubPage(XraySubscriptionsScreenFragment())
+        }
+        view.findViewById<View>(R.id.subTopUp).setOnClickListener { askTopUp() }
+        view.findViewById<View>(R.id.subLogout).setOnClickListener {
+            thread(isDaemon = true) {
+                CabinetApi.signOut()
+                main.post { state = null; reload() }
+            }
+        }
         render()
     }
 
@@ -83,6 +101,7 @@ class SubscriptionScreenFragment : Fragment(R.layout.fragment_settings_screen) {
                     main.post { oauthProviders = p; render() }
                 }
             }
+            view?.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(R.id.subRefresh)?.isRefreshing = false
             render()
             return
         }
@@ -103,10 +122,15 @@ class SubscriptionScreenFragment : Fragment(R.layout.fragment_settings_screen) {
                         if (arr == null) emptyList() else (0 until arr.length()).map { arr.getJSONObject(it) }
                     }.getOrDefault(emptyList())
                 } else emptyList()
-                State(CabinetApi.me(), subscription, CabinetApi.balanceKopeks(), renewals, tariffs)
+                val history = runCatching {
+                    val a = CabinetApi.deposits()
+                    (0 until a.length()).map { a.getJSONObject(it) }
+                }.getOrDefault(emptyList())
+                State(CabinetApi.me(), subscription, CabinetApi.balanceKopeks(), renewals, tariffs, history)
             }
             main.post {
                 loading = false
+                view?.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(R.id.subRefresh)?.isRefreshing = false
                 result.onSuccess { state = it }
                 result.onFailure { error = it.message }
                 render()
@@ -117,168 +141,269 @@ class SubscriptionScreenFragment : Fragment(R.layout.fragment_settings_screen) {
     // ---- UI ------------------------------------------------------------
 
     private fun render() {
-        val root = view?.findViewById<LinearLayout>(R.id.settingsContent) ?: return
-        root.removeAllViews()
+        val v = view ?: return
+        val signedIn = CabinetApi.signedIn
         val s = state
-        when {
-            !CabinetApi.signedIn -> root.addView(buildSignInSection())
-            s == null -> root.addView(buildLoadingSection())
-            else -> {
-                root.addView(buildStatusSection(s))
-                root.addView(buildBuySection(s))
-                root.addView(buildBalanceSection(s))
-            }
+        v.findViewById<View>(R.id.subSignedOut).visibility = if (signedIn) View.GONE else View.VISIBLE
+        v.findViewById<View>(R.id.subSignedIn).visibility = if (signedIn && s != null) View.VISIBLE else View.GONE
+        v.findViewById<View>(R.id.subAccountRow).visibility = if (signedIn) View.VISIBLE else View.GONE
+        v.findViewById<TextView>(R.id.subLinksCount).text = Prefs.xraySubscriptions.size.toString()
+
+        val header = v.findViewById<TextView>(R.id.subHeader)
+        val statusLine = v.findViewById<TextView>(R.id.subStatusLine)
+        val title = v.findViewById<TextView>(R.id.subTitle)
+        val detail = v.findViewById<TextView>(R.id.subDetail)
+        detail.visibility = View.GONE
+        statusLine.setTextColor(requireContext().getColor(R.color.accent_emerald))
+
+        if (!signedIn) {
+            header.text = getString(R.string.nav_servers)
+            statusLine.text = getString(R.string.sub_signed_out_status)
+            title.text = getString(R.string.sub_signed_out_title)
+            detail.text = getString(R.string.sub_signed_out_detail)
+            detail.visibility = View.VISIBLE
+            v.findViewById<TextView>(R.id.subLoginTelegramLabel).text =
+                getString(if (pollToken != null) R.string.sub_login_waiting else R.string.sub_login_telegram)
+            renderOtherLogins(v.findViewById(R.id.subLoginOther))
+            return
         }
-        root.addView(buildLinksSection())
-        if (CabinetApi.signedIn) root.addView(buildAccountSection())
+        if (s == null) {
+            header.text = ""
+            statusLine.text = if (loading) getString(R.string.sub_loading) else (error ?: getString(R.string.sub_error_generic))
+            title.text = if (loading) "…" else getString(R.string.sub_retry)
+            return
+        }
+        header.text = s.user.optString("username").let { if (it.isNotBlank()) "@$it" else "" }
+            .ifBlank { s.user.optString("email") }.ifBlank { s.user.optString("first_name") }
+        renderStatus(v, s)
+        renderBuy(v, s)
+        renderHistory(v.findViewById(R.id.subHistory), s.history)
     }
 
-    private fun buildSignInSection(): View {
-        val section = ui.newSection(R.string.sub_section_manage)
-        val card = ui.sectionCard(section)
-        ui.addRow(card, R.drawable.ic_telegram, getString(R.string.sub_login_telegram),
-            if (pollToken != null) getString(R.string.sub_login_waiting) else getString(R.string.sub_login_telegram_sub), null) {
-            startTelegramLogin()
+    private fun renderOtherLogins(box: LinearLayout) {
+        box.removeAllViews()
+        val items = listOf(getString(R.string.sub_login_email_short) to { showEmailLogin() }) +
+            oauthProviders.map { p -> p.displayName to { startOAuth(p.name) } }
+        items.forEachIndexed { i, (label, action) ->
+            box.addView(chip(label, i < items.lastIndex) { action() })
         }
-        ui.addRow(card, R.drawable.ic_setting_autofill, getString(R.string.sub_login_email), null, null) {
-            showEmailLogin()
-        }
-        oauthProviders.forEach { p ->
-            ui.addRow(card, R.drawable.ic_setting_advanced, getString(R.string.sub_login_oauth, p.displayName), null, null) {
-                startOAuth(p.name)
-            }
-        }
-        ui.addRow(card, R.drawable.ic_telegram, getString(R.string.sub_open_bot), getString(R.string.sub_open_bot_sub), null) {
-            openUrl("https://t.me/corsxray2bot")
-        }
-        return section
     }
 
-    private fun buildLoadingSection(): View {
-        val section = ui.newSection(R.string.sub_section_status)
-        val card = ui.sectionCard(section)
-        ui.addRow(card, R.drawable.ic_setting_reconnect,
-            if (loading) getString(R.string.sub_loading) else (error ?: getString(R.string.sub_error_generic)),
-            if (loading) null else getString(R.string.sub_retry), null) { reload() }
-        return section
-    }
-
-    private fun buildStatusSection(s: State): View {
-        val section = ui.newSection(R.string.sub_section_status)
-        val card = ui.sectionCard(section)
+    private fun renderStatus(v: View, s: State) {
+        val statusLine = v.findViewById<TextView>(R.id.subStatusLine)
+        val title = v.findViewById<TextView>(R.id.subTitle)
         val sub = s.subscription
+        val addServers = v.findViewById<View>(R.id.subAddServers)
+        addServers.visibility = View.GONE
         if (sub == null) {
-            ui.addRow(card, R.drawable.ic_setting_tunnel, getString(R.string.sub_none), null, null) {}
-            return section
-        }
-        val end = runCatching {
-            val iso = sub.getString("end_date").take(19)
-            val d = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).parse(iso)
-            SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(d!!)
-        }.getOrDefault("—")
-        val title = when {
-            sub.optBoolean("is_active") && sub.optBoolean("is_trial") -> getString(R.string.sub_status_trial)
-            sub.optBoolean("is_active") -> getString(R.string.sub_status_active)
-            else -> getString(R.string.sub_status_expired)
-        }
-        ui.addRow(card, R.drawable.ic_setting_tunnel, title, getString(R.string.sub_until, end),
-            sub.optString("time_left_display").ifBlank { getString(R.string.sub_days, sub.optInt("days_left")) }) {}
-        val limit = sub.optInt("traffic_limit_gb")
-        val used = sub.optDouble("traffic_used_gb", 0.0)
-        ui.addRow(card, R.drawable.ic_setting_dns, getString(R.string.sub_traffic),
-            null, if (limit > 0) String.format(Locale.US, "%.1f / %d GB", used, limit) else String.format(Locale.US, "%.1f GB / ∞", used)) {}
-        ui.addRow(card, R.drawable.ic_setting_split, getString(R.string.sub_devices), null, sub.optInt("device_limit").toString()) {}
-        val url = sub.optString("subscription_url")
-        if (url.isNotBlank() && Prefs.xraySubscriptions.none { it.url.trim() == url.trim() }) {
-            ui.addRow(card, R.drawable.ic_plus, getString(R.string.sub_add_servers), getString(R.string.sub_add_servers_sub), null) {
-                AddXraySubscriptionSheet.show(parentFragmentManager, url)
+            statusLine.text = getString(R.string.sub_none)
+            statusLine.setTextColor(requireContext().getColor(R.color.ink_3))
+            title.text = getString(R.string.sub_choose_tariff)
+            v.findViewById<TextView>(R.id.subTraffic).text = "—"
+            v.findViewById<TextView>(R.id.subDevices).text = "—"
+        } else {
+            val end = runCatching {
+                val d = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).parse(sub.getString("end_date").take(19))
+                SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(d!!)
+            }.getOrDefault("—")
+            val active = sub.optBoolean("is_active")
+            val kind = when {
+                active && sub.optBoolean("is_trial") -> getString(R.string.sub_status_trial)
+                active -> getString(R.string.sub_status_active)
+                else -> getString(R.string.sub_status_expired)
+            }
+            statusLine.text = "$kind · ${getString(R.string.sub_until, end)}"
+            if (!active) statusLine.setTextColor(requireContext().getColor(R.color.error_red))
+            val days = sub.optInt("days_left")
+            title.text = if (active) resources.getQuantityString(R.plurals.sub_days_left, days, days)
+            else getString(R.string.sub_renew_title)
+            val limit = sub.optInt("traffic_limit_gb")
+            val used = sub.optDouble("traffic_used_gb", 0.0)
+            v.findViewById<TextView>(R.id.subTraffic).text =
+                if (limit > 0) String.format(Locale.getDefault(), "%.1f/%d GB", used, limit)
+                else String.format(Locale.getDefault(), "%.1f GB", used)
+            v.findViewById<android.widget.ProgressBar>(R.id.subTrafficBar).apply {
+                visibility = if (limit > 0) View.VISIBLE else View.GONE
+                progress = sub.optDouble("traffic_used_percent", 0.0).toInt()
+            }
+            v.findViewById<TextView>(R.id.subDevices).text = sub.optInt("device_limit").toString()
+            val url = sub.optString("subscription_url")
+            if (url.isNotBlank() && Prefs.xraySubscriptions.none { subKey(it.url) == subKey(url) }) {
+                addServers.visibility = View.VISIBLE
+                addServers.setOnClickListener { AddXraySubscriptionSheet.show(parentFragmentManager, url) }
             }
         }
-        return section
+        v.findViewById<TextView>(R.id.subBalance).text = rub(s.balanceKopeks)
     }
 
-    private fun buildBuySection(s: State): View {
-        val section = ui.newSection(if (s.renewals.isNotEmpty()) R.string.sub_section_renew else R.string.sub_section_buy)
-        val card = ui.sectionCard(section)
+    private class Offer(val title: String, val price: String, val badge: String?, val highlighted: Boolean, val onClick: () -> Unit)
+
+    private fun renderBuy(v: View, s: State) {
+        val label = v.findViewById<TextView>(R.id.subBuyLabel)
+        val grid = v.findViewById<LinearLayout>(R.id.subBuyGrid)
+        grid.removeAllViews()
+        val offers = mutableListOf<Offer>()
         if (s.renewals.isNotEmpty()) {
+            label.setText(R.string.sub_section_renew)
             val subId = s.subscription?.optInt("id")
             s.renewals.forEach { o ->
                 val days = o.getInt("period_days")
                 val price = rub(o.optLong("price_kopeks"))
-                val sub = if (o.optInt("discount_percent") > 0) "−${o.optInt("discount_percent")}%" else null
-                ui.addRow(card, R.drawable.ic_setting_reconnect, getString(R.string.sub_period, periodLabel(days)), sub, price) {
+                val disc = o.optInt("discount_percent")
+                offers += Offer(periodLabel(days), price, if (disc > 0) "−$disc%" else null, o.optBoolean("is_highlighted")) {
                     confirmPay(getString(R.string.sub_confirm_renew, periodLabel(days), price), o.optLong("price_kopeks"), s) {
                         CabinetApi.renew(days, subId)
                     }
                 }
             }
-        } else if (s.tariffs.isNotEmpty()) {
+        } else {
+            label.setText(R.string.sub_section_buy)
             s.tariffs.filter { !it.optBoolean("is_daily") }.forEach { t ->
                 val periods = t.optJSONArray("periods") ?: return@forEach
                 for (i in 0 until periods.length()) {
                     val p = periods.getJSONObject(i)
-                    val label = p.optString("label").ifBlank { periodLabel(p.getInt("days")) }
+                    val period = p.optString("label").ifBlank { periodLabel(p.getInt("days")) }
                     val price = p.optString("price_label").ifBlank { rub(p.optLong("price_kopeks")) }
-                    ui.addRow(card, R.drawable.ic_plus, "${t.optString("name")} · $label", null, price) {
-                        confirmPay(getString(R.string.sub_confirm_buy, t.optString("name"), label, price), p.optLong("price_kopeks"), s) {
+                    offers += Offer(period, price, t.optString("name").takeIf { s.tariffs.size > 1 }, p.optBoolean("is_highlighted")) {
+                        confirmPay(getString(R.string.sub_confirm_buy, t.optString("name"), period, price), p.optLong("price_kopeks"), s) {
                             CabinetApi.purchaseTariff(t.getInt("id"), p.getInt("days"))
                         }
                     }
                 }
             }
-        } else {
-            ui.addRow(card, R.drawable.ic_telegram, getString(R.string.sub_buy_in_bot), null, null) {
-                openUrl("https://t.me/corsxray2bot")
-            }
         }
-        return section
+        if (offers.isEmpty()) {
+            grid.addView(chip(getString(R.string.sub_buy_in_bot), false) { openUrl(BOT_URL) })
+            return
+        }
+        offers.chunked(2).forEach { pair ->
+            val row = LinearLayout(requireContext()).apply { orientation = LinearLayout.HORIZONTAL }
+            pair.forEachIndexed { i, o -> row.addView(offerCard(o, gapEnd = i == 0)) }
+            if (pair.size == 1) row.addView(View(requireContext()), LinearLayout.LayoutParams(0, 0, 1f).apply { marginStart = dp(4) })
+            grid.addView(row)
+        }
     }
 
-    private fun buildBalanceSection(s: State): View {
-        val section = ui.newSection(R.string.sub_section_balance)
-        val card = ui.sectionCard(section)
-        ui.addRow(card, R.drawable.ic_plus, getString(R.string.sub_topup), getString(R.string.sub_balance_sub), rub(s.balanceKopeks)) {
-            InputActionSheet.show(parentFragmentManager, getString(R.string.sub_topup), null,
-                getString(R.string.sub_topup_amount), "300") { value ->
-                val rubles = value.trim().replace(',', '.').toDoubleOrNull()
-                if (rubles == null || rubles < 10) toast(getString(R.string.sub_topup_min))
-                else startTopUp((rubles * 100).toLong())
+    private fun offerCard(o: Offer, gapEnd: Boolean): View {
+        val ctx = requireContext()
+        val card = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundResource(if (o.highlighted) R.drawable.bg_destination_card_active else R.drawable.bg_destination_card)
+            if (!o.highlighted) background?.mutate()?.alpha = 102
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            isClickable = true
+            isFocusable = true
+            foreground = ctx.getDrawable(android.R.drawable.list_selector_background)?.also { it.alpha = 0 }
+            setOnClickListener { o.onClick() }
+        }
+        card.addView(TextView(ctx).apply {
+            text = o.title
+            setTextColor(ctx.getColor(R.color.ink))
+            textSize = 13.5f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        })
+        val priceRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+        priceRow.addView(TextView(ctx).apply {
+            text = o.price
+            typeface = android.graphics.Typeface.MONOSPACE
+            setTextColor(ctx.getColor(R.color.accent_emerald))
+            textSize = 15f
+        })
+        if (o.badge != null) priceRow.addView(TextView(ctx).apply {
+            text = o.badge
+            typeface = android.graphics.Typeface.MONOSPACE
+            setTextColor(ctx.getColor(R.color.ok_green))
+            textSize = 10f
+            setPadding(dp(8), 0, 0, 0)
+        })
+        card.addView(priceRow, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(4) })
+        return card.apply {
+            layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply {
+                bottomMargin = dp(8)
+                if (gapEnd) marginEnd = dp(4) else marginStart = dp(4)
             }
         }
-        return section
     }
 
-    private fun buildLinksSection(): View {
-        val section = ui.newSection(R.string.sub_section_links)
-        val card = ui.sectionCard(section)
-        val count = Prefs.xraySubscriptions.size
-        ui.addRow(card, R.drawable.ic_setting_proxy, getString(R.string.sub_links_manage), getString(R.string.sub_links_manage_sub),
-            count.toString()) {
-            (activity as? MainActivityHost)?.pushSubPage(XraySubscriptionsScreenFragment())
+    private fun renderHistory(box: LinearLayout, items: List<JSONObject>) {
+        box.removeAllViews()
+        val ctx = requireContext()
+        if (items.isEmpty()) {
+            box.addView(TextView(ctx).apply {
+                text = getString(R.string.sub_history_empty)
+                setTextColor(ctx.getColor(R.color.ink_3))
+                textSize = 12f
+                setPadding(0, dp(10), 0, dp(10))
+            })
+            return
         }
-        return section
-    }
-
-    private fun buildAccountSection(): View {
-        val section = ui.newSection(R.string.sub_section_account)
-        val card = ui.sectionCard(section)
-        val u = state?.user
-        val who = u?.let { it.optString("username").ifBlank { it.optString("email") }.ifBlank { it.optString("first_name") } }
-        ui.addRow(card, R.drawable.ic_telegram, getString(R.string.sub_open_cabinet), who?.takeIf { it.isNotBlank() }, null) {
-            openUrl(CabinetApi.CABINET_URL)
-        }
-        ui.addRow(card, R.drawable.ic_setting_reset, getString(R.string.sub_logout), null, null, danger = true) {
-            thread(isDaemon = true) {
-                CabinetApi.signOut()
-                main.post { state = null; reload() }
+        val inFmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
+        val outFmt = SimpleDateFormat("dd.MM.yy HH:mm", Locale.getDefault())
+        items.forEachIndexed { i, t ->
+            if (i > 0) box.addView(View(ctx).apply { setBackgroundColor(ctx.getColor(R.color.hair)) }, LinearLayout.LayoutParams(-1, 1))
+            val row = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(0, dp(9), 0, dp(9))
             }
+            val left = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+            left.addView(TextView(ctx).apply {
+                text = t.optString("description").ifBlank { t.optString("payment_method").ifBlank { getString(R.string.sub_topup) } }
+                setTextColor(ctx.getColor(R.color.ink))
+                textSize = 12.5f
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+            })
+            left.addView(TextView(ctx).apply {
+                val date = runCatching { outFmt.format(inFmt.parse(t.getString("created_at").take(19))!!) }.getOrDefault("")
+                text = if (t.optBoolean("is_completed", true)) date else "$date · ${getString(R.string.sub_history_pending)}"
+                typeface = android.graphics.Typeface.MONOSPACE
+                setTextColor(ctx.getColor(R.color.ink_3))
+                textSize = 10f
+            })
+            row.addView(left, LinearLayout.LayoutParams(0, -2, 1f))
+            row.addView(TextView(ctx).apply {
+                text = "+" + rub(t.optLong("amount_kopeks"))
+                typeface = android.graphics.Typeface.MONOSPACE
+                setTextColor(ctx.getColor(if (t.optBoolean("is_completed", true)) R.color.ok_green else R.color.ink_3))
+                textSize = 13f
+                setPadding(dp(8), 0, 0, 0)
+            })
+            box.addView(row)
         }
-        return section
     }
+
+    private fun chip(label: String, gapEnd: Boolean, onClick: () -> Unit): TextView =
+        TextView(requireContext(), null, 0, R.style.QuickChip).apply {
+            text = label
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setBackgroundResource(R.drawable.bg_quick_chip)
+            gravity = android.view.Gravity.CENTER
+            setTextColor(requireContext().getColor(R.color.ink_2))
+            textSize = 12f
+            setOnClickListener { onClick() }
+            layoutParams = LinearLayout.LayoutParams(0, dp(34), 1f).apply { if (gapEnd) marginEnd = dp(8) }
+        }
+
+    private fun askTopUp() {
+        InputActionSheet.show(parentFragmentManager, getString(R.string.sub_topup), null,
+            getString(R.string.sub_topup_amount), "300") { value ->
+            val rubles = value.trim().replace(',', '.').toDoubleOrNull()
+            if (rubles == null || rubles < 10) toast(getString(R.string.sub_topup_min))
+            else startTopUp((rubles * 100).toLong())
+        }
+    }
+
+    /** Last path segment (the panel's short id) — same subscription across sub-page domains. */
+    private fun subKey(url: String) = url.trim().substringBefore('?').trimEnd('/').substringAfterLast('/')
+
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     // ---- flows ---------------------------------------------------------
 
     private fun startTelegramLogin() {
+        if (pollToken != null) return
         runIo({ CabinetApi.requestDeepLink() }) { link ->
             pollToken = link.token
             pollDeadline = System.currentTimeMillis() + link.expiresInSec * 1000L
@@ -429,5 +554,9 @@ class SubscriptionScreenFragment : Fragment(R.layout.fragment_settings_screen) {
         days % 365 == 0 -> resources.getQuantityString(R.plurals.sub_years, days / 365, days / 365)
         days % 30 == 0 -> resources.getQuantityString(R.plurals.sub_months, days / 30, days / 30)
         else -> resources.getQuantityString(R.plurals.sub_days_plural, days, days)
+    }
+
+    private companion object {
+        const val BOT_URL = "https://t.me/corsxray2bot"
     }
 }
