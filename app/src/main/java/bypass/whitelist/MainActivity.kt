@@ -723,8 +723,28 @@ class MainActivity :
             if (status == VpnStatus.TUNNEL_ACTIVE) {
                 connected = true
                 mainFragment()?.onConnectedChanged(true)
+                maybeAdoptManualCallLink()
             }
         }
+    }
+
+    /** Link of the last manual (non-controller) call join, for [maybeAdoptManualCallLink]. */
+    private var manualJoinLink: String? = null
+
+    /**
+     * A call link the user added by hand (typically one the VK bot sent) has
+     * no controller behind it, so its relay instance used to die at the
+     * server's 5-minute temp TTL. Once the tunnel is up, hand it to a
+     * controller that claims it to this user's account (subscription link
+     * = authorization) and heartbeats it like the normal flow.
+     */
+    private fun maybeAdoptManualCallLink() {
+        if (corsController != null) return
+        val link = manualJoinLink ?: return
+        manualJoinLink = null
+        appendLog("Cors.Connect: adopting connected call for lifetime extension")
+        corsController = CorsInstanceController(applicationContext, corsClient, corsHost)
+            .also { it.adoptConnectedLink(link) }
     }
 
     override fun pushSubPage(fragment: Fragment) {
@@ -1213,6 +1233,9 @@ class MainActivity :
         }
         val url = config.url.trim()
         if (url.isEmpty()) return
+        // Remember links joined without the Cors.Connect controller (manual
+        // destinations) so the instance can be adopted once connected.
+        manualJoinLink = if (corsController == null) url else null
 
         // Belt-and-suspenders: every instance connection funnels through here
         // (list selection + hero press, the Cors.Connect auto-provision flow,

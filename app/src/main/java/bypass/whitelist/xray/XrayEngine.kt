@@ -182,6 +182,9 @@ class XrayEngine(
 
         @Volatile private var envReady = false
 
+        private const val DELAY_HARD_TIMEOUT_MS = 6_000L
+        private val delayExecutor = java.util.concurrent.Executors.newCachedThreadPool()
+
         /**
          * "Real delay" of [server]: spins up a throwaway core with just this
          * server's outbound and times an HTTP GET through it — the full path
@@ -206,8 +209,19 @@ class XrayEngine(
                 put("log", org.json.JSONObject().put("loglevel", "none"))
                 put("outbounds", org.json.JSONArray().put(server.toOutboundJson("proxy")))
             }.toString()
+            // The binding retries internally inside a ~12s window; a server
+            // that hasn't finished the handshake + HTTP round-trip in
+            // DELAY_HARD_TIMEOUT_MS is useless anyway, so report a timeout
+            // early instead of holding the row on "Ping…".
+            val future = delayExecutor.submit<Int?> {
+                try {
+                    Libv2ray.measureOutboundDelay(config, DELAY_TEST_URL).toInt().takeIf { it >= 0 }
+                } catch (_: Throwable) {
+                    null
+                }
+            }
             return try {
-                Libv2ray.measureOutboundDelay(config, DELAY_TEST_URL).toInt().takeIf { it >= 0 }
+                future.get(DELAY_HARD_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
             } catch (_: Throwable) {
                 null
             }

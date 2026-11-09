@@ -39,11 +39,11 @@ object LinkAuth {
      * Attempts link-auth with [url]. Returns the username on success, null
      * otherwise. A successful result is stored in [Prefs] (see [store]).
      */
-    fun trySignIn(url: String): String? {
+    fun trySignIn(url: String, client: CorsClient = CorsClient()): String? {
         val link = url.trim()
         if (link.isEmpty() || link in rejectedUrls) return null
         return try {
-            val out = CorsClient().authLink(link)
+            val out = client.authLink(link)
             if (out.token.isBlank()) {
                 rejectedUrls += link
                 null
@@ -73,9 +73,12 @@ object LinkAuth {
      * expired, which used to silently block the implicit re-sign-in (the
      * "already signed in" checks must look at corsSessionToken instead).
      */
-    fun trySignInFromXraySubscriptions(): String? {
+    fun trySignInFromXraySubscriptions(client: CorsClient = CorsClient()): String? {
+        val stored = Prefs.corsSubscriptionLink
+        if (stored.isNotBlank()) trySignIn(stored, client)?.let { return it }
         for (sub in Prefs.xraySubscriptions) {
-            val username = trySignIn(sub.url)
+            if (sub.url.trim() == stored.trim()) continue
+            val username = trySignIn(sub.url, client)
             if (username != null) return username
         }
         return null

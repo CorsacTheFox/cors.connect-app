@@ -29,7 +29,7 @@ import kotlin.concurrent.thread
 class MainFragmentView(private val root: View) {
 
     companion object {
-        private const val PING_TIMEOUT_MS = 3_000
+        private const val PING_TIMEOUT_MS = 2_000
 
         /** How often the visible pings are re-measured (connected view + list). */
         private const val PING_REFRESH_MS = 10_000L
@@ -134,7 +134,7 @@ class MainFragmentView(private val root: View) {
     private val pingCache = mutableMapOf<String, Int>()
     private val pingInFlight = mutableSetOf<String>()
     /** Real-delay probes each spin up a throwaway core — cap the parallelism. */
-    private val pingExecutor = java.util.concurrent.Executors.newFixedThreadPool(3)
+    private val pingExecutor = java.util.concurrent.Executors.newFixedThreadPool(12)
     /** Last row [TextView] and host:port bound per ping key — drives [refreshVisiblePings]. */
     private val pingViews = mutableMapOf<String, TextView>()
     private val pingTargets = mutableMapOf<String, Pair<String, Int>>()
@@ -656,9 +656,16 @@ class MainFragmentView(private val root: View) {
         if (!pingInFlight.add(key)) return
         updatePingCheckSpin()
         pingExecutor.execute {
-            val rtt = pingServers[key]
-                ?.let { XrayEngine.measureServerDelay(it, root.context.filesDir.resolve("xray")) }
-                ?: if (key in pingServers) null else measurePing(host, port)
+            val server = pingServers[key]
+            val rtt = if (server != null) {
+                // Fast pre-filter: a dead TCP port can't complete a handshake,
+                // so skip the (slow) throwaway core. UDP protocols (Hysteria2)
+                // can't be tcpinged — go straight to the real handshake.
+                val tcpDead = server.protocol != bypass.whitelist.xray.XrayProtocol.HYSTERIA2 &&
+                    measurePing(host, port) == null
+                if (tcpDead) null
+                else XrayEngine.measureServerDelay(server, root.context.filesDir.resolve("xray"))
+            } else measurePing(host, port)
             pingCache[key] = rtt ?: -1
             mainHandler.post {
                 pingInFlight.remove(key)

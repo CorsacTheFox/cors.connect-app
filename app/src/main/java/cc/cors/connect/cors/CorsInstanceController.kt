@@ -77,6 +77,7 @@ class CorsInstanceController(
             .apply { setReferenceCounted(false) }
     }
     @Volatile private var heartbeatRunning: Boolean = false
+    @Volatile private var heartbeatAuthRetries: Int = 0
 
     fun start() {
         stopped = false
@@ -245,6 +246,19 @@ class CorsInstanceController(
         Log.w(TAG, "adoptRelayedInstance: gave up (stopped=$stopped)")
     }
 
+    /**
+     * The user connected to a call link they got from the VK bot themselves
+     * (added manually, not via [tryVkFallback]). Once the tunnel is up, find
+     * that relay instance on the server, claim it to this user's account and
+     * heartbeat it — the same lifetime handling as the normal flow, only
+     * started after the connection. No-op for links that aren't relay
+     * instances (the lookup 404s).
+     */
+    fun adoptConnectedLink(link: String) {
+        stopped = false
+        bg { adoptRelayedInstance(link) }
+    }
+
     /** Resumes the claim step after Telegram initData has arrived. */
     fun resumeClaim() {
         bg { tryClaim() }
@@ -262,6 +276,10 @@ class CorsInstanceController(
      *     afterwards and [tryClaim] finishes the flow.
      */
     private fun createInstanceResilient(): CreateInstanceOut {
+        // A subscription link the user added is sufficient authorization: on
+        // each connect re-run link-auth so the server (re)grants the
+        // extension right and we hold a fresh 12h bearer — no bot sign-in.
+        LinkAuth.trySignInFromXraySubscriptions(client)
         val session = Prefs.corsSessionToken
         if (session.isNotBlank()) {
             try {
@@ -293,7 +311,7 @@ class CorsInstanceController(
         //    subscription link IS one of the app's xray subscription URLs —
         //    try link-auth with them before degrading to the anonymous temp
         //    flow (LinkAuth skips already-signed-in and firmly-rejected URLs).
-        if (LinkAuth.trySignInFromXraySubscriptions() != null) {
+        if (LinkAuth.trySignInFromXraySubscriptions(client) != null) {
             return try {
                 client.createInstance(sessionToken = Prefs.corsSessionToken)
             } catch (e2: CorsException) {
@@ -368,10 +386,15 @@ class CorsInstanceController(
         // initData. With neither, try the stored xray subscriptions (for most
         // users their Remnawave subscription link IS one of them) — only then
         // surface the "add your subscription" state.
+        // A subscription link the user added is enough: refresh link-auth
+        // through the *current* client (tunnel-routed in VK-relay mode, where
+        // the direct network is whitelisted) so the server grants the
+        // extension right and we hold a valid bearer before claiming.
+        LinkAuth.trySignInFromXraySubscriptions(client)
         var session = Prefs.corsSessionToken
         val initData = TelegramAuth.initData()
         if (session.isBlank() && initData.isEmpty()) {
-            session = if (LinkAuth.trySignInFromXraySubscriptions() != null) {
+            session = if (LinkAuth.trySignInFromXraySubscriptions(client) != null) {
                 Prefs.corsSessionToken
             } else {
                 post { host.onCorsNeedsTelegram() }
@@ -431,6 +454,7 @@ class CorsInstanceController(
         }
         Log.i(TAG, "startHeartbeat: instanceId=$currentInstanceId, firstBeatIn=${HEARTBEAT_FIRST_DELAY_MS}ms")
         heartbeatRunning = true
+        heartbeatAuthRetries = 0
         // Hold the wake lock across the whole first-delay wait, not just the
         // network call: a bare Handler.postDelayed() does NOT wake the CPU
         // from Doze/App Standby, so if the screen turns off before this fires
@@ -476,6 +500,7 @@ class CorsInstanceController(
         val t0 = System.currentTimeMillis()
         try {
             val out = client.heartbeat(currentInstanceId, sessionToken)
+            heartbeatAuthRetries = 0
             Log.i(TAG, "doHeartbeat: OK in ${System.currentTimeMillis() - t0}ms, expiresAt=${out.expiresAt}")
             // success — schedule the next beat, keeping the CPU awake for the
             // full wait until then (see startHeartbeat for why).
@@ -494,12 +519,22 @@ class CorsInstanceController(
                 // 403 specifically = unauthorized to extend: the server caps the
                 // instance at 5 minutes. Surface a clear message rather than a
                 // generic failure; the instance will expire on its own.
-                403 -> {
+                401, 403 -> if (recoverHeartbeatAuth()) {
+                    // Fresh link-auth session (the server grants extension to
+                    // any ACTIVE subscription link) — retry promptly so the
+                    // 5-minute window never lapses.
+                    acquireHeartbeatWakeLock(HEARTBEAT_RETRY_MS)
+                    heartbeatHandler.postDelayed(this::doHeartbeat, HEARTBEAT_RETRY_MS)
+                } else if (e.code == 403) {
                     heartbeatRunning = false
                     runCatching { if (wakeLock.isHeld) wakeLock.release() }
                     post { host.onCorsStatus(resString("cors_status_limited_5min")) }
+                } else {
+                    heartbeatRunning = false
+                    runCatching { if (wakeLock.isHeld) wakeLock.release() }
+                    post { host.onCorsStatus(detailMessage("cors_status_failed", e.detail)) }
                 }
-                401, 404, 410 -> {
+                404, 410 -> {
                     heartbeatRunning = false
                     runCatching { if (wakeLock.isHeld) wakeLock.release() }
                     post { host.onCorsStatus(detailMessage("cors_status_failed", e.detail)) }
@@ -522,6 +557,22 @@ class CorsInstanceController(
                 runCatching { if (wakeLock.isHeld) wakeLock.release() }
             }
         }
+    }
+
+    /**
+     * Heartbeat got 401 (session expired) or 403 (account lacked the
+     * extension right): re-sign-in with the stored subscription link, then
+     * any stored xray subscription. Max a few attempts per instance.
+     */
+    private fun recoverHeartbeatAuth(): Boolean {
+        if (heartbeatAuthRetries >= 3) return false
+        heartbeatAuthRetries++
+        val fresh = silentRelogin()
+            ?: LinkAuth.trySignInFromXraySubscriptions(client)?.let { Prefs.corsSessionToken.takeIf { t -> t.isNotBlank() } }
+            ?: return false
+        if (fresh == sessionToken && heartbeatAuthRetries > 1) return false
+        sessionToken = fresh
+        return true
     }
 
     private fun stopTracked() {
@@ -582,7 +633,8 @@ class CorsInstanceController(
         // every ~120s keeps the deadline comfortably ahead of the wall clock
         // even if a beat is dropped. The first beat fires shortly after claim.
         private const val HEARTBEAT_FIRST_DELAY_MS = 30_000L      // 30s after claim
-        private const val HEARTBEAT_INTERVAL_MS = 120_000L        // every 2 min
+        private const val HEARTBEAT_INTERVAL_MS = 90_000L         // every 1.5 min
+        private const val HEARTBEAT_RETRY_MS = 5_000L
         private const val HEARTBEAT_WAKELOCK_TIMEOUT_MS = 20_000L // max per-beat hold
     }
 }
