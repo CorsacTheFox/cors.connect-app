@@ -105,6 +105,8 @@ object PrefsKeys {
     const val CABINET_OAUTH_PROVIDER = "cabinet_oauth_provider"
     const val PUSH_LAST_ID = "push_last_id"
     const val CORS_SUBSCRIPTION_LINK = "cors_subscription_link"
+    const val CORS_SERVICE_ID = "cors_service_id"
+    const val CORS_SERVICES = "cors_services"
     const val CORS_LINK_METHOD = "cors_link_method"
 
     /** Stable per-install device id sent as `x-hwid` on subscription requests. */

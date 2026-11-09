@@ -61,6 +61,8 @@ class CorsClient(
 
     // ---- endpoints -------------------------------------------------------
 
+    fun services(): List<AppService> = AppService.parseList(request("GET", "/api/app/services"))
+
     fun health(): Health = Health.parse(request("GET", "/api/app/health"))
 
     fun createInstance(

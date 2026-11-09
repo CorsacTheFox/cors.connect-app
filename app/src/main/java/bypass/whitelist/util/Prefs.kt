@@ -436,6 +436,26 @@ object Prefs {
      * the session can be silently re-established after the session token
      * expires, without asking the user to paste the link again.
      */
+    /** Backend service picked in the Whitelist bypass list; 0 = server default. */
+    var corsServiceId: Int
+        get() = prefs.getInt(PrefsKeys.CORS_SERVICE_ID, 0)
+        set(value) = prefs.edit { putInt(PrefsKeys.CORS_SERVICE_ID, value) }
+
+    /** Last fetched backend service list (cached for offline / whitelisted networks). */
+    var corsServices: List<cc.cors.connect.api.AppService>
+        get() = runCatching {
+            val arr = org.json.JSONArray(prefs.getString(PrefsKeys.CORS_SERVICES, "[]"))
+            (0 until arr.length()).map {
+                val o = arr.getJSONObject(it)
+                cc.cors.connect.api.AppService(o.getInt("id"), o.optString("name"))
+            }
+        }.getOrDefault(emptyList())
+        set(value) = prefs.edit {
+            val arr = org.json.JSONArray()
+            value.forEach { arr.put(org.json.JSONObject().put("id", it.id).put("name", it.name)) }
+            putString(PrefsKeys.CORS_SERVICES, arr.toString())
+        }
+
     var corsSubscriptionLink: String
         get() = prefs.getString(PrefsKeys.CORS_SUBSCRIPTION_LINK, "") ?: ""
         set(value) = prefs.edit { putString(PrefsKeys.CORS_SUBSCRIPTION_LINK, value.trim()) }

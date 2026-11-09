@@ -283,13 +283,13 @@ class CorsInstanceController(
         val session = Prefs.corsSessionToken
         if (session.isNotBlank()) {
             try {
-                return client.createInstance(sessionToken = session)
+                return client.createInstance(serviceId = selectedServiceId(), sessionToken = session)
             } catch (e: CorsException) {
                 if (e.code != 401) throw e
                 val refreshed = silentRelogin()
                 if (refreshed != null) {
                     return try {
-                        client.createInstance(sessionToken = refreshed)
+                        client.createInstance(serviceId = selectedServiceId(), sessionToken = refreshed)
                     } catch (e2: CorsException) {
                         if (e2.code == 401) { clearSession(); anonymousCreate() } else throw e2
                     }
@@ -301,7 +301,7 @@ class CorsInstanceController(
         val initData = TelegramAuth.initData()
         if (initData.isNotEmpty()) {
             try {
-                return client.createInstance(telegramInitData = initData)
+                return client.createInstance(serviceId = selectedServiceId(), telegramInitData = initData)
             } catch (e: CorsException) {
                 if (e.code == 401) TelegramAuth.clear() else throw e
             }
@@ -313,7 +313,7 @@ class CorsInstanceController(
         //    flow (LinkAuth skips already-signed-in and firmly-rejected URLs).
         if (LinkAuth.trySignInFromXraySubscriptions(client) != null) {
             return try {
-                client.createInstance(sessionToken = Prefs.corsSessionToken)
+                client.createInstance(serviceId = selectedServiceId(), sessionToken = Prefs.corsSessionToken)
             } catch (e2: CorsException) {
                 if (e2.code == 401) { clearSession(); anonymousCreate() } else throw e2
             }
@@ -321,8 +321,10 @@ class CorsInstanceController(
         return anonymousCreate()
     }
 
+    private fun selectedServiceId(): Int? = Prefs.corsServiceId.takeIf { it > 0 }
+
     private fun anonymousCreate(): CreateInstanceOut =
-        client.createInstance(serviceId = null, telegramInitData = null)
+        client.createInstance(serviceId = selectedServiceId(), telegramInitData = null)
 
     /**
      * Re-establishes the session from the stored subscription link after the

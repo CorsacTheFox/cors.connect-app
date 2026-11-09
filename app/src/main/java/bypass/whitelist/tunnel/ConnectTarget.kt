@@ -12,7 +12,7 @@ sealed class ConnectTarget {
      * There's no user-supplied link/config to pick between anymore, so
      * unlike [Xray] this carries no per-item data.
      */
-    object WhitelistBypass : ConnectTarget()
+    data class WhitelistBypass(val serviceId: Int = 0, val serviceName: String = "") : ConnectTarget()
 
     /**
      * A manually added call link (VK / Telemost / WB Stream / DION), saved via

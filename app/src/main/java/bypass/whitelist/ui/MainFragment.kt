@@ -124,7 +124,7 @@ class MainFragment : Fragment(R.layout.fragment_main_screen), XrayServersListene
                             host()?.onConnectPressed(ConnectTarget.Instance(destination))
                         } else {
                             confirmWhitelistThenConnect {
-                                host()?.onConnectPressed(ConnectTarget.WhitelistBypass)
+                                host()?.onConnectPressed(ConnectTarget.WhitelistBypass(Prefs.corsServiceId))
                             }
                         }
                     }
@@ -181,6 +181,7 @@ class MainFragment : Fragment(R.layout.fragment_main_screen), XrayServersListene
         container.onEntrySelected = { target ->
             when (target) {
                 is ConnectTarget.WhitelistBypass -> {
+                    Prefs.corsServiceId = target.serviceId
                     Prefs.activeDestinationId = ""
                     Prefs.connectionMode = ConnectionMode.INSTANCE
                 }

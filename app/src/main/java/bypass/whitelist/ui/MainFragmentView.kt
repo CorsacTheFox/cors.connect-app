@@ -192,7 +192,7 @@ class MainFragmentView(private val root: View) {
         activeServerId = activeId
         // Drop cache entries for servers that no longer exist (but keep the
         // fixed Whitelist Bypass ping — it has no XrayServer backing it).
-        val liveIds = servers.map { it.id }.toSet() + WHITELIST_PING_KEY
+        val liveIds = servers.map { it.id }.toSet() + whitelistTargets().map { whitelistPingKey(it.serviceId) }
         pingCache.keys.retainAll(liveIds)
         pingViews.keys.retainAll(liveIds)
         pingTargets.keys.retainAll(liveIds)
@@ -293,7 +293,7 @@ class MainFragmentView(private val root: View) {
                 routeExitValue.text = "—"
             }
         } else {
-            routeCity.text = context.getString(R.string.connection_type_whitelist_bypass)
+            routeCity.text = selectedWhitelistTitle()
             routeExitValue.text = "cors.connect"
         }
         routeDeviceValue.text = deviceNetworkLabel()
@@ -328,7 +328,7 @@ class MainFragmentView(private val root: View) {
 
     private fun activePingText(): String {
         val key = if (Prefs.connectionMode == ConnectionMode.XRAY) Prefs.xrayActiveServerId
-                  else WHITELIST_PING_KEY
+                  else whitelistPingKey(effectiveServiceId())
         val rtt = pingCache[key] ?: return root.context.getString(R.string.ping_measuring)
         return if (rtt >= 0) root.context.getString(R.string.ping_ms, rtt)
         else root.context.getString(R.string.ping_timeout)
@@ -468,7 +468,7 @@ class MainFragmentView(private val root: View) {
         callsList.removeAllViews()
         nodeLoadRows.clear()
         connectedServerSlot.removeAllViews()
-        val entries: List<ConnectTarget> = listOf(ConnectTarget.WhitelistBypass) +
+        val entries: List<ConnectTarget> = whitelistTargets() +
             Prefs.savedDestinations.map { ConnectTarget.Instance(it) } +
             currentServers.map { ConnectTarget.Xray(it) }
         val visibleEntries = if (collapsedToActive) {
@@ -485,7 +485,7 @@ class MainFragmentView(private val root: View) {
             val row = inflater.inflate(R.layout.item_call_row, if (inCard) connectedServerSlot else callsList, false)
             row.clipToOutline = true
             when (target) {
-                is ConnectTarget.WhitelistBypass -> bindWhitelistBypassRow(row, isActive = isActiveEntry(target))
+                is ConnectTarget.WhitelistBypass -> bindWhitelistBypassRow(row, target, isActive = isActiveEntry(target))
                 is ConnectTarget.Xray -> bindServerRow(row, target.server, isActive = isActiveEntry(target))
                 is ConnectTarget.Instance -> bindDestinationRow(row, target.config, isActive = isActiveEntry(target))
             }
@@ -506,16 +506,16 @@ class MainFragmentView(private val root: View) {
         }
         if ((mainListScroll.layoutParams as LinearLayout.LayoutParams).weight == 0f) mainListScroll.post { fitListToContent() }
         // Whitelist Bypass has no node-load line — match the server rows' height.
-        if (callsList.childCount > 1) {
-            val wl = callsList.getChildAt(0)
-            val ref = callsList.getChildAt(1)
+        val wlCount = if (showConnectedCard) 0 else visibleEntries.count { it is ConnectTarget.WhitelistBypass }
+        if (wlCount > 0 && callsList.childCount > wlCount) {
+            val ref = callsList.getChildAt(wlCount)
             val w = callsList.width.takeIf { it > 0 } ?: (root.width - 2 * (16 * root.resources.displayMetrics.density).toInt())
             if (w > 0) {
                 ref.measure(
                     View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
                     View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
                 )
-                wl.minimumHeight = ref.measuredHeight
+                for (i in 0 until wlCount) callsList.getChildAt(i).minimumHeight = ref.measuredHeight
             }
         }
     }
@@ -530,27 +530,80 @@ class MainFragmentView(private val root: View) {
      */
     private fun isActiveEntry(target: ConnectTarget): Boolean = when (target) {
         is ConnectTarget.WhitelistBypass ->
-            Prefs.connectionMode == ConnectionMode.INSTANCE && Prefs.activeDestinationId.isBlank()
+            Prefs.connectionMode == ConnectionMode.INSTANCE && Prefs.activeDestinationId.isBlank() &&
+                target.serviceId == effectiveServiceId()
         is ConnectTarget.Xray -> Prefs.connectionMode == ConnectionMode.XRAY && target.server.id == Prefs.xrayActiveServerId
         is ConnectTarget.Instance ->
             Prefs.connectionMode == ConnectionMode.INSTANCE && target.config.id == Prefs.activeDestinationId
     }
 
-    private fun bindWhitelistBypassRow(row: View, isActive: Boolean) {
+    /**
+     * One "Whitelist bypass (<service>)" row per enabled backend service
+     * (cached in [Prefs.corsServices], refreshed by [refreshServices]). With
+     * no list yet, a single row that uses the server's default service.
+     */
+    private fun whitelistTargets(): List<ConnectTarget.WhitelistBypass> {
+        val services = Prefs.corsServices
+        if (services.isEmpty()) return listOf(ConnectTarget.WhitelistBypass())
+        return services.map { ConnectTarget.WhitelistBypass(it.id, it.name) }
+    }
+
+    /** The selected service, falling back to the first one when the pick vanished. */
+    private fun effectiveServiceId(): Int {
+        val services = Prefs.corsServices
+        if (services.isEmpty()) return 0
+        val id = Prefs.corsServiceId
+        return if (services.any { it.id == id }) id else services.first().id
+    }
+
+    private fun whitelistPingKey(serviceId: Int) = "$WHITELIST_PING_KEY:$serviceId"
+
+    private fun whitelistTitle(serviceName: String): String {
+        val base = root.context.getString(R.string.connection_type_whitelist_bypass)
+        return if (serviceName.isBlank()) base else "$base ($serviceName)"
+    }
+
+    private fun selectedWhitelistTitle(): String {
+        val id = effectiveServiceId()
+        return whitelistTitle(Prefs.corsServices.firstOrNull { it.id == id }?.name.orEmpty())
+    }
+
+    @Volatile private var servicesFetchInFlight = false
+
+    /** Pulls the backend service list off the main thread; re-renders on change. */
+    fun refreshServices() {
+        if (servicesFetchInFlight) return
+        servicesFetchInFlight = true
+        pingExecutor.execute {
+            val fresh = runCatching { cc.cors.connect.api.CorsClient().services() }.getOrNull()
+            mainHandler.post {
+                servicesFetchInFlight = false
+                if (fresh == null || fresh == Prefs.corsServices) return@post
+                Prefs.corsServices = fresh
+                if (fresh.isNotEmpty() && fresh.none { it.id == Prefs.corsServiceId }) {
+                    Prefs.corsServiceId = fresh.first().id
+                }
+                renderList()
+                applyRouteTarget()
+            }
+        }
+    }
+
+    private fun bindWhitelistBypassRow(row: View, target: ConnectTarget.WhitelistBypass, isActive: Boolean) {
         val context = row.context
         val nameView = row.findViewById<TextView>(R.id.rowName)
         val linkView = row.findViewById<TextView>(R.id.rowLink)
         val protocolView = row.findViewById<TextView>(R.id.rowProtocol)
         val statusDot = row.findViewById<View>(R.id.rowStatusDot)
 
-        nameView.text = root.context.getString(R.string.connection_type_whitelist_bypass)
+        nameView.text = whitelistTitle(target.serviceName)
         linkView.text = root.context.getString(R.string.whitelist_bypass_row_sub)
         // The protocol line would just duplicate the row name here.
         protocolView.visibility = View.GONE
         // No Xray address of its own — tcping the Cors.Connect backend instead.
         val pingView = row.findViewById<TextView>(R.id.rowPing)
         pingView.visibility = View.VISIBLE
-        bindPing(pingView, WHITELIST_PING_KEY, whitelistPingHost, whitelistPingPort)
+        bindPing(pingView, whitelistPingKey(target.serviceId), whitelistPingHost, whitelistPingPort)
 
         applyRowActiveState(row, nameView, linkView, protocolView, statusDot, isActive, context)
     }
@@ -716,6 +769,7 @@ class MainFragmentView(private val root: View) {
      * Called from the fragment's onResume; paired with [stopPingUpdates].
      */
     fun startPingUpdates() {
+        refreshServices()
         mainHandler.removeCallbacks(pingRefreshRunnable)
         mainHandler.postDelayed(pingRefreshRunnable, PING_REFRESH_MS)
         refreshNodeLoad()

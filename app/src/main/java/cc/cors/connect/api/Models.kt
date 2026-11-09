@@ -8,6 +8,20 @@ import org.json.JSONObject
 private fun JSONObject.optNullableString(key: String): String? =
     if (has(key) && !isNull(key)) optString(key).takeIf { it.isNotEmpty() } else null
 
+/** A backend service the app can launch: "Whitelist bypass (<name>)". */
+data class AppService(val id: Int, val name: String) {
+    companion object {
+        fun parseList(o: JSONObject): List<AppService> {
+            val arr = o.optJSONArray("services") ?: return emptyList()
+            return (0 until arr.length()).mapNotNull { i ->
+                val s = arr.optJSONObject(i) ?: return@mapNotNull null
+                val id = s.optInt("id", 0)
+                if (id <= 0) null else AppService(id, s.optString("name"))
+            }
+        }
+    }
+}
+
 data class Health(
     val ok: Boolean,
     val telegramEnabled: Boolean,
