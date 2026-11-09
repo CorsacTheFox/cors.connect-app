@@ -104,6 +104,11 @@ class MainFragmentView(private val root: View) {
     var onQuickBotClicked: Callback? = null
     var onAuthHintBotClicked: Callback? = null
     var onAllServersClicked: Callback? = null
+    var onAutoBestClicked: Callback? = null
+
+    /** "Unavailable" section (servers whose ping timed out) — collapsed by default. */
+    private var unavailableExpanded = false
+    private var heroConnected = false
 
     /**
      * Ping target for the Whitelist Bypass entry — it has no Xray address:port
@@ -209,6 +214,7 @@ class MainFragmentView(private val root: View) {
             status == VpnStatus.STOPPING || status == VpnStatus.CALL_CONNECTED ||
             status == VpnStatus.DATACHANNEL_OPEN
         setTopFills(connected)
+        heroConnected = connected
         if (connected) {
             connectBarLabel.text = context.getString(R.string.hero_disconnect)
             routeStatusLine.text = context.getString(R.string.route_status_connected, routeUptime.text.ifBlank { "00:00:00" })
@@ -468,20 +474,26 @@ class MainFragmentView(private val root: View) {
         callsList.removeAllViews()
         nodeLoadRows.clear()
         connectedServerSlot.removeAllViews()
+        val activeId = Prefs.xrayActiveServerId
+        val (available, unavailable) = currentServers.partition {
+            pingCache[it.id] != -1 || it.id == activeId
+        }
         val entries: List<ConnectTarget> = whitelistTargets() +
             Prefs.savedDestinations.map { ConnectTarget.Instance(it) } +
-            currentServers.map { ConnectTarget.Xray(it) }
+            available.map { ConnectTarget.Xray(it) }
         val visibleEntries = if (collapsedToActive) {
-            entries.filter { isActiveEntry(it) }
+            (entries + unavailable.map { ConnectTarget.Xray(it) }).filter { isActiveEntry(it) }
         } else {
             entries
         }
+        val autoBefore = visibleEntries.indexOfFirst { it is ConnectTarget.Xray }
         emptyCta.visibility = View.GONE
         callsList.visibility = View.VISIBLE
         val inflater = LayoutInflater.from(root.context)
         callsList.visibility = if (showConnectedCard) View.GONE else View.VISIBLE
-        visibleEntries.forEach { target ->
+        visibleEntries.forEachIndexed { index, target ->
             val inCard = showConnectedCard
+            if (!inCard && !collapsedToActive && index == autoBefore) callsList.addView(buildAutoBestRow(inflater))
             val row = inflater.inflate(R.layout.item_call_row, if (inCard) connectedServerSlot else callsList, false)
             row.clipToOutline = true
             when (target) {
@@ -500,9 +512,25 @@ class MainFragmentView(private val root: View) {
                 row.setPadding(0, row.paddingTop, 0, row.paddingBottom)
                 (row.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin = 0
                 connectedServerSlot.addView(row)
-                return@forEach
+                return@forEachIndexed
             }
             callsList.addView(row)
+        }
+        if (!showConnectedCard && !collapsedToActive) {
+            if (autoBefore < 0 && unavailable.isNotEmpty()) callsList.addView(buildAutoBestRow(inflater))
+            if (unavailable.isNotEmpty()) {
+                callsList.addView(buildUnavailableDivider(unavailable.size))
+                if (unavailableExpanded) unavailable.forEach { server ->
+                    val target = ConnectTarget.Xray(server)
+                    val row = inflater.inflate(R.layout.item_call_row, callsList, false)
+                    row.clipToOutline = true
+                    bindServerRow(row, server, isActive = isActiveEntry(target))
+                    row.alpha = 0.55f
+                    row.setOnClickListener { onEntrySelected?.invoke(target) }
+                    row.setOnLongClickListener { onEntryLongPressed?.invoke(target); true }
+                    callsList.addView(row)
+                }
+            }
         }
         if ((mainListScroll.layoutParams as LinearLayout.LayoutParams).weight == 0f) mainListScroll.post { fitListToContent() }
         // Whitelist Bypass has no node-load line — match the server rows' height.
@@ -532,9 +560,66 @@ class MainFragmentView(private val root: View) {
         is ConnectTarget.WhitelistBypass ->
             Prefs.connectionMode == ConnectionMode.INSTANCE && Prefs.activeDestinationId.isBlank() &&
                 target.serviceId == effectiveServiceId()
-        is ConnectTarget.Xray -> Prefs.connectionMode == ConnectionMode.XRAY && target.server.id == Prefs.xrayActiveServerId
+        is ConnectTarget.Xray -> Prefs.connectionMode == ConnectionMode.XRAY && !Prefs.xrayAutoBest &&
+            target.server.id == Prefs.xrayActiveServerId
         is ConnectTarget.Instance ->
             Prefs.connectionMode == ConnectionMode.INSTANCE && target.config.id == Prefs.activeDestinationId
+    }
+
+    /** Lowest measured real delay among the servers, or null if none answered yet. */
+    private fun bestServer(): XrayServer? = currentServers
+        .filter { (pingCache[it.id] ?: -1) >= 0 }
+        .minByOrNull { pingCache[it.id]!! }
+
+    /**
+     * With auto-select on, points [Prefs.xrayActiveServerId] at the best
+     * server. Never swaps while connected (that would silently drop the
+     * session); the next connect picks up the then-best server.
+     */
+    fun applyAutoBest(): Boolean {
+        if (!Prefs.xrayAutoBest || heroConnected) return false
+        val best = bestServer() ?: return false
+        if (best.id == Prefs.xrayActiveServerId) return false
+        Prefs.xrayActiveServerId = best.id
+        activeServerId = best.id
+        return true
+    }
+
+    private fun buildAutoBestRow(inflater: LayoutInflater): View {
+        val row = inflater.inflate(R.layout.item_call_row, callsList, false)
+        row.clipToOutline = true
+        val ctx = row.context
+        val nameView = row.findViewById<TextView>(R.id.rowName)
+        val linkView = row.findViewById<TextView>(R.id.rowLink)
+        val protocolView = row.findViewById<TextView>(R.id.rowProtocol)
+        val statusDot = row.findViewById<View>(R.id.rowStatusDot)
+        row.findViewById<TextView>(R.id.rowFlag).apply { text = "⚡"; visibility = View.VISIBLE }
+        nameView.text = ctx.getString(R.string.auto_best_title)
+        val best = if (Prefs.xrayAutoBest) currentServers.firstOrNull { it.id == Prefs.xrayActiveServerId } else bestServer()
+        protocolView.text = best?.let { splitLeadingFlag(it.remark).second } ?: ctx.getString(R.string.auto_best_searching)
+        linkView.visibility = View.GONE
+        val pingView = row.findViewById<TextView>(R.id.rowPing)
+        val rtt = best?.let { pingCache[it.id] }
+        if (rtt != null) { pingView.visibility = View.VISIBLE; applyPingText(pingView, rtt) } else pingView.visibility = View.GONE
+        val active = Prefs.connectionMode == ConnectionMode.XRAY && Prefs.xrayAutoBest
+        applyRowActiveState(row, nameView, linkView, protocolView, statusDot, active, ctx)
+        row.setOnClickListener { onAutoBestClicked?.invoke() }
+        return row
+    }
+
+    private fun buildUnavailableDivider(count: Int): View {
+        val ctx = root.context
+        val d = ctx.resources.displayMetrics.density
+        return TextView(ctx).apply {
+            text = ctx.getString(R.string.unavailable_servers, count) + if (unavailableExpanded) "  ▾" else "  ▸"
+            setTextColor(ctx.getColor(R.color.ink_3))
+            textSize = 13f
+            setPadding((8 * d).toInt(), (14 * d).toInt(), (8 * d).toInt(), (10 * d).toInt())
+            setOnClickListener {
+                unavailableExpanded = !unavailableExpanded
+                renderList()
+            }
+        }
     }
 
     /**
@@ -719,9 +804,20 @@ class MainFragmentView(private val root: View) {
                 if (tcpDead) null
                 else XrayEngine.measureServerDelay(server, root.context.filesDir.resolve("xray"))
             } else measurePing(host, port)
+            val prev = pingCache[key]
             pingCache[key] = rtt ?: -1
             mainHandler.post {
                 pingInFlight.remove(key)
+                if (key in pingServers) {
+                    val flipped = (prev == -1) != (rtt == null)
+                    val switched = applyAutoBest()
+                    if (flipped || switched || Prefs.xrayAutoBest) {
+                        renderList()
+                        if (switched) applyRouteTarget()
+                        refreshRoutePing()
+                        return@post
+                    }
+                }
                 updatePingCheckSpin()
                 // The list re-inflates often (refresh, selection, …): write to
                 // the row currently bound to this key, not the one we started with.
@@ -788,7 +884,7 @@ class MainFragmentView(private val root: View) {
             val (host, port) = pingTargets[key] ?: continue
             // Real-delay probes start a throwaway core each; on the timer only
             // the selected server is re-measured (the header button does all).
-            if (key in pingServers && key != Prefs.xrayActiveServerId) continue
+            if (key in pingServers && key != Prefs.xrayActiveServerId && !Prefs.xrayAutoBest) continue
             any = true
             measurePingAsync(key, host, port, view)
         }

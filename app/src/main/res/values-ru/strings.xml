@@ -474,4 +474,7 @@
     <string name="routing_auto_geo_loading">загрузка…</string>
     <string name="routing_auto_geo_missing">не скачаны</string>
     <string name="routing_auto_geo_failed">Не удалось скачать geoip/geosite, повторим при подключении</string>
+    <string name="auto_best_title">Автовыбор (лучший сервер)</string>
+    <string name="auto_best_searching">Проверяем серверы…</string>
+    <string name="unavailable_servers">Недоступные (%1$d)</string>
 </resources>

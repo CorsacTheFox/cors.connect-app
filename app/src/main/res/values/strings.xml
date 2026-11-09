@@ -469,4 +469,7 @@
     <string name="routing_auto_geo_loading">downloading…</string>
     <string name="routing_auto_geo_missing">not downloaded</string>
     <string name="routing_auto_geo_failed">Couldn\'t download geoip/geosite, will retry on connect</string>
+    <string name="auto_best_title">Auto (best server)</string>
+    <string name="auto_best_searching">Measuring servers…</string>
+    <string name="unavailable_servers">Unavailable (%1$d)</string>
 </resources>

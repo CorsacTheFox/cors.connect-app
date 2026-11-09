@@ -186,6 +186,7 @@ class MainFragment : Fragment(R.layout.fragment_main_screen), XrayServersListene
                     Prefs.connectionMode = ConnectionMode.INSTANCE
                 }
                 is ConnectTarget.Xray -> {
+                    Prefs.xrayAutoBest = false
                     Prefs.xrayActiveServerId = target.server.id
                     Prefs.connectionMode = ConnectionMode.XRAY
                 }
@@ -194,6 +195,12 @@ class MainFragment : Fragment(R.layout.fragment_main_screen), XrayServersListene
                     Prefs.connectionMode = ConnectionMode.INSTANCE
                 }
             }
+            container.refresh()
+        }
+        container.onAutoBestClicked = {
+            Prefs.xrayAutoBest = true
+            Prefs.connectionMode = ConnectionMode.XRAY
+            container.applyAutoBest()
             container.refresh()
         }
         container.onEntryLongPressed = { target ->

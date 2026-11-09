@@ -436,6 +436,11 @@ object Prefs {
      * the session can be silently re-established after the session token
      * expires, without asking the user to paste the link again.
      */
+    /** Main list "auto (best server)" toggle: active server follows the best ping. */
+    var xrayAutoBest: Boolean
+        get() = prefs.getBoolean("xray_auto_best", false)
+        set(value) = prefs.edit { putBoolean("xray_auto_best", value) }
+
     /** Backend service picked in the Whitelist bypass list; 0 = server default. */
     var corsServiceId: Int
         get() = prefs.getInt(PrefsKeys.CORS_SERVICE_ID, 0)
