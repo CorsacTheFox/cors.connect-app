@@ -176,7 +176,7 @@
 
     <string name="services_run">Service availability</string>
     <string name="quick_chip_bot">Check / buy subscription</string>
-    <string name="main_chip_subscription">Subscription</string>
+    <string name="main_chip_subscription">Speed test</string>
     <string name="main_route_section">Connections</string>
     <string name="main_route_all_servers">All servers</string>
     <string name="services_running">Checking&#8230;</string>

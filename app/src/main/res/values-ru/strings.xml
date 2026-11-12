@@ -181,7 +181,7 @@
 
     <string name="services_run">Проверка сервисов</string>
     <string name="quick_chip_bot">Проверить/купить подписку</string>
-    <string name="main_chip_subscription">Подписка</string>
+    <string name="main_chip_subscription">Тест скорости</string>
     <string name="main_route_section">Подключения</string>
     <string name="main_route_all_servers">Все серверы</string>
     <string name="services_running">Проверка&#8230;</string>

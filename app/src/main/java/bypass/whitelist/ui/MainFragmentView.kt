@@ -37,8 +37,6 @@ class MainFragmentView(private val root: View) {
         /** [pingCache] key for the Whitelist Bypass row / connected route ping. */
         private const val WHITELIST_PING_KEY = "__whitelist_bypass__"
 
-        /** One speed-test round per process start (then on each pull-to-refresh). */
-        @Volatile private var launchSpeedRoundDone = false
     }
 
     private val headerSub: TextView = root.findViewById(R.id.headerSub)
@@ -115,7 +113,7 @@ class MainFragmentView(private val root: View) {
     /** Speed results (Mbit/s, -1 = failed), persisted in [Prefs.xraySpeeds]. */
     private val speedCache = java.util.concurrent.ConcurrentHashMap<String, Double>(Prefs.xraySpeeds)
     /** True while a speed round is open: each server is tested once after its ping succeeds. */
-    @Volatile private var speedRound = !launchSpeedRoundDone.also { launchSpeedRoundDone = true }
+    @Volatile private var speedRound = false
     private val speedDone = java.util.Collections.synchronizedSet(mutableSetOf<String>())
     private val speedInFlight = java.util.Collections.synchronizedSet(mutableSetOf<String>())
     private var heroConnected = false
@@ -579,11 +577,22 @@ class MainFragmentView(private val root: View) {
     }
 
     /** Lowest measured real delay among the servers, or null if none answered yet. */
-    private fun bestServer(): XrayServer? {
-        val alive = currentServers.filter { (pingCache[it.id] ?: -1) >= 0 && speedCache[it.id] != -1.0 }
-        // Measured speed wins (that's what the user feels); ping breaks ties / fills in.
-        alive.filter { (speedCache[it.id] ?: -1.0) > 0 }.maxByOrNull { speedCache[it.id]!! }?.let { return it }
-        return alive.minByOrNull { pingCache[it.id]!! }
+    private fun bestServer(): XrayServer? = currentServers
+        .filter { (pingCache[it.id] ?: -1) >= 0 && speedCache[it.id] != -1.0 }
+        .minByOrNull { pingCache[it.id]!! }
+
+    /**
+     * "Speed test" chip: re-pings every server and, once each ping succeeds,
+     * runs one short download through it. Servers that fail it move to the
+     * unavailable section; best-server choice stays ping-based.
+     */
+    fun runSpeedTest() {
+        speedRound = true
+        speedDone.clear()
+        speedCache.clear()
+        pingCache.clear()
+        renderList()
+        refreshRoutePing()
     }
 
     /**
@@ -886,9 +895,6 @@ class MainFragmentView(private val root: View) {
      */
     fun invalidatePings() {
         pingCache.clear()
-        speedRound = true
-        speedDone.clear()
-        speedCache.clear()
         renderList()
         refreshRoutePing()
     }
