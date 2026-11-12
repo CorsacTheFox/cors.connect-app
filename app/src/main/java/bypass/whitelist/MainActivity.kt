@@ -424,76 +424,66 @@ class MainActivity :
 
     override fun onServiceCheckPressed(callback: (List<MainFragment.ServiceStatus>) -> Unit) {
         thread {
-            // Sequential on purpose: each service is reported as soon as its
-            // probe finishes, so the dialog fills row by row instead of
-            // dumping everything at the end. A bounded parallel pool was
-            // tried before, but simultaneous TLS handshakes through a single
-            // proxy outbound caused timeouts for perfectly reachable hosts.
-            val results = mutableListOf<MainFragment.ServiceStatus>()
-            for ((_, host) in MainFragment.SERVICE_TARGETS) {
-                results.add(checkServiceWithRetry(host))
-                val snapshot = results.toList()
-                runOnUiThread { callback(snapshot) }
+            // Small parallel pool: results land in list order as they finish.
+            val targets = MainFragment.SERVICE_TARGETS
+            val results = arrayOfNulls<MainFragment.ServiceStatus>(targets.size)
+            val pool = java.util.concurrent.Executors.newFixedThreadPool(3)
+            targets.forEachIndexed { i, (_, host) ->
+                pool.execute {
+                    val r = checkService(host)
+                    synchronized(results) { results[i] = r }
+                    val snapshot = synchronized(results) { results.filterNotNull() }
+                    runOnUiThread { callback(snapshot) }
+                }
             }
+            pool.shutdown()
         }
     }
 
     /**
-     * One availability row: a real TCP ping to host:443 *through the active
-     * tunnel*, up to three attempts with a short backoff. A single attempt
-     * through a mobile proxy is noisy — slow TLS handshakes, momentary resets
-     * and rate-limiting all fail the first try even when the service is
-     * reachable — so the retries keep those from being reported as
-     * "unavailable". The reported RTT is the time to complete the SOCKS5
-     * CONNECT to the destination, i.e. an actual round-trip over the tunnel.
+     * Availability of one service: a real HTTPS request (DNS → TCP → TLS →
+     * HTTP) to https://[host]/ made through the running tunnel's loopback
+     * SOCKS5 — the same path CorsClient uses for in-tunnel calls. Any HTTP
+     * status counts as reachable (sites answer proxies with 3xx/4xx bot
+     * walls); only a failed connect/TLS/timeout is "unavailable". Two tries.
      */
-    private fun checkServiceWithRetry(host: String): MainFragment.ServiceStatus {
+    private fun checkService(host: String): MainFragment.ServiceStatus {
         var rttMs: Int? = null
-        repeat(3) { attempt ->
-            if (rttMs == null) {
-                if (attempt > 0) Thread.sleep(300)
-                rttMs = measureServiceRtt(host)
-            }
+        for (attempt in 0 until 2) {
+            if (attempt > 0) Thread.sleep(400)
+            rttMs = httpProbe(host)
+            if (rttMs != null) break
         }
         return MainFragment.ServiceStatus(name = hostDisplayName(host), ok = rttMs != null, rttMs = rttMs ?: 0)
     }
 
-    /**
-     * Real round-trip to `host:443` through whichever tunnel is up, measured at
-     * the TCP level (SOCKS5 CONNECT), so the result answers exactly "can the
-     * tunnel reach this site, and how fast" without HTTP semantics:
-     *  - Xray mode: through the core's loopback SOCKS inbound (see
-     *    [XrayConfigBuilder]; the app's UID is excluded from the VPN, so plain
-     *    sockets here would bypass the tunnel). If that inbound isn't
-     *    reachable at all, falls back to the core's own through-tunnel probe.
-     *  - Instance/call mode: through the local relay's SOCKS5, which forwards
-     *    the connection over the WebRTC data channel.
-     */
-    private fun measureServiceRtt(host: String): Int? {
-        // Probe the tunnel that is actually up, not the one highlighted in the
-        // list: picking another row (or auto-select) while connected flips
-        // Prefs.connectionMode, and the old lookup then dialed the idle port.
+    private fun httpProbe(host: String): Int? {
+        cc.cors.connect.api.TunnelSocksAuth.install()
         for (port in serviceCheckSocksPorts()) {
-            val viaSocks = try {
-                probeViaSocks5(host = host, port = 443, socksPort = port)
+            val proxy = java.net.Proxy(java.net.Proxy.Type.SOCKS, InetSocketAddress(Net.LOCALHOST, port))
+            val started = System.nanoTime()
+            try {
+                val conn = java.net.URL("https://$host/").openConnection(proxy) as java.net.HttpURLConnection
+                conn.instanceFollowRedirects = false
+                conn.connectTimeout = 8_000
+                conn.readTimeout = 8_000
+                conn.useCaches = false
+                conn.requestMethod = "HEAD"
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126 Mobile Safari/537.36")
+                try {
+                    conn.responseCode
+                } finally {
+                    conn.disconnect()
+                }
+                return ((System.nanoTime() - started) / 1_000_000).toInt()
             } catch (e: Exception) {
                 appendLog("Service check $host via :$port failed: ${e.javaClass.simpleName} ${e.message ?: ""}")
-                null
             }
-            if (viaSocks != null) return viaSocks
         }
-
         val xray = XrayVpnService.instance
-        if (xray?.isRunning == true && !loopbackSocksReachable()) {
-            // Loopback inbound never accepted the connection (e.g. a session
-            // started before it existed) — let the core probe through itself.
-            return xray.measureThroughTunnel("https://$host")?.toInt()
-        }
+        if (xray?.isRunning == true) return xray.measureThroughTunnel("https://$host")?.toInt()
         return null
     }
-
-    private fun hostDisplayName(host: String): String =
-        MainFragment.SERVICE_TARGETS.firstOrNull { it.second == host }?.first ?: host
 
     /** Loopback SOCKS ports to try, the running tunnel's own port first. */
     private fun serviceCheckSocksPorts(): List<Int> {
@@ -502,6 +492,9 @@ class MainActivity :
         val other = if (xrayUp) Prefs.socksPort else Prefs.xraySocksPort
         return listOf(primary.toInt(), other.toInt()).distinct()
     }
+
+    private fun hostDisplayName(host: String): String =
+        MainFragment.SERVICE_TARGETS.firstOrNull { it.second == host }?.first ?: host
 
     /** Whether the core's loopback SOCKS inbound accepts TCP connections. */
     private fun loopbackSocksReachable(): Boolean = try {

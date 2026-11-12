@@ -75,14 +75,22 @@ class MainFragment : Fragment(R.layout.fragment_main_screen), XrayServersListene
          * order: display name → host used for the probe (HTTPS :443).
          */
         val SERVICE_TARGETS: List<Pair<String, String>> = listOf(
-            "Instagram" to "instagram.com",
-            "Facebook" to "facebook.com",
-            "X / Twitter" to "x.com",
-            "YouTube" to "youtube.com",
+            "YouTube" to "www.youtube.com",
+            "Telegram" to "web.telegram.org",
+            "WhatsApp" to "web.whatsapp.com",
             "Discord" to "discord.com",
-            "Signal" to "signal.org",
-            "LinkedIn" to "linkedin.com",
             "ChatGPT" to "chatgpt.com",
+            "Claude" to "claude.ai",
+            "Gemini" to "gemini.google.com",
+            "X / Twitter" to "x.com",
+            "Facebook" to "www.facebook.com",
+            "TikTok" to "www.tiktok.com",
+            "Spotify" to "open.spotify.com",
+            "Netflix" to "www.netflix.com",
+            "Twitch" to "www.twitch.tv",
+            "LinkedIn" to "www.linkedin.com",
+            "Signal" to "signal.org",
+            "Instagram" to "www.instagram.com",
         )
     }
 

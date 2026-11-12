@@ -376,7 +376,7 @@ data class LoginOut(
  * Answers only SOCKS requests for the loopback proxy; everything else gets
  * no credentials.
  */
-private object TunnelSocksAuth : java.net.Authenticator() {
+internal object TunnelSocksAuth : java.net.Authenticator() {
     @Volatile private var installed = false
 
     fun install() {
