@@ -472,4 +472,7 @@
     <string name="auto_best_title">Auto (best server)</string>
     <string name="auto_best_searching">Measuring servers…</string>
     <string name="unavailable_servers">Unavailable (%1$d)</string>
+    <string name="speed_testing">speed…</string>
+    <string name="speed_failed">speed: fail</string>
+    <string name="speed_mbps">%1$.1f Mbps</string>
 </resources>

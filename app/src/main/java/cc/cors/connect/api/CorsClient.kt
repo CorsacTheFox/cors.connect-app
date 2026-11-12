@@ -204,7 +204,7 @@ class CorsClient(
         val url = URL(urlStr)
         if (viaTunnel) {
             TunnelSocksAuth.install()
-            val proxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress(Net.LOCALHOST, Prefs.activeLoopbackSocksPort.toInt()))
+            val proxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress(Net.LOCALHOST, (if (bypass.whitelist.tunnel.XrayVpnService.instance?.isRunning == true) Prefs.xraySocksPort else Prefs.socksPort).toInt()))
             return listOf { url.openConnection(proxy) as HttpURLConnection }
         }
         val direct: () -> HttpURLConnection = { url.openConnection() as HttpURLConnection }

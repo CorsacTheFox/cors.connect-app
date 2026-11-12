@@ -436,6 +436,14 @@ object Prefs {
      * the session can be silently re-established after the session token
      * expires, without asking the user to paste the link again.
      */
+    /** Last speed test per Xray server id, Mbit/s (-1 = failed). */
+    var xraySpeeds: Map<String, Double>
+        get() = try {
+            val o = org.json.JSONObject(prefs.getString("xray_speeds", "{}") ?: "{}")
+            o.keys().asSequence().associateWith { o.getDouble(it) }
+        } catch (_: Exception) { emptyMap() }
+        set(value) = prefs.edit { putString("xray_speeds", org.json.JSONObject(value as Map<*, *>).toString()) }
+
     /** Main list "auto (best server)" toggle: active server follows the best ping. */
     var xrayAutoBest: Boolean
         get() = prefs.getBoolean("xray_auto_best", false)

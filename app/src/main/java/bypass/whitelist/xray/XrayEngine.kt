@@ -182,6 +182,88 @@ class XrayEngine(
 
         @Volatile private var envReady = false
 
+        private const val SPEED_TEST_URL = "https://speed.cloudflare.com/__down?bytes=3000000"
+        private const val SPEED_TEST_MS = 5_000L
+        /** Parallel downloads would split the device's bandwidth and skew results. */
+        private val speedSlots = java.util.concurrent.Semaphore(2)
+
+        private val quietHandler = object : CoreCallbackHandler {
+            override fun startup(): Long = 0L
+            override fun shutdown(): Long = 0L
+            override fun onEmitStatus(code: Long, message: String): Long = 0L
+        }
+
+        private fun ensureEnv(assetsDir: File): Boolean {
+            if (envReady) return true
+            return try {
+                assetsDir.mkdirs()
+                Libv2ray.initCoreEnv(assetsDir.absolutePath, "")
+                envReady = true
+                true
+            } catch (_: Throwable) {
+                false
+            }
+        }
+
+        /**
+         * Short download test through [server]: a throwaway core with only a
+         * loopback SOCKS inbound (no TUN) → this server's outbound, then up to
+         * [SPEED_TEST_MS] of an HTTP download through it. Returns Mbit/s, or
+         * null when the server can't carry real traffic (handshake ok but the
+         * download is refused/stalls — exactly the "pings but doesn't work" case).
+         */
+        fun measureServerSpeed(server: XrayServer, assetsDir: File): Double? {
+            if (!ensureEnv(assetsDir)) return null
+            speedSlots.acquire()
+            var core: CoreController? = null
+            try {
+                val port = java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1")).use { it.localPort }
+                val config = org.json.JSONObject().apply {
+                    put("log", org.json.JSONObject().put("loglevel", "none"))
+                    put("inbounds", org.json.JSONArray().put(org.json.JSONObject().apply {
+                        put("tag", "speed-in")
+                        put("protocol", "socks")
+                        put("listen", "127.0.0.1")
+                        put("port", port)
+                        put("settings", org.json.JSONObject().put("auth", "noauth").put("udp", false))
+                    }))
+                    put("outbounds", org.json.JSONArray().put(server.toOutboundJson("proxy")))
+                }.toString()
+                core = Libv2ray.newCoreController(quietHandler)
+                core.startLoop(config, 0)
+                val proxy = java.net.Proxy(java.net.Proxy.Type.SOCKS, java.net.InetSocketAddress("127.0.0.1", port))
+                val conn = java.net.URL(SPEED_TEST_URL).openConnection(proxy) as java.net.HttpURLConnection
+                conn.connectTimeout = 5_000
+                conn.readTimeout = 4_000
+                conn.useCaches = false
+                try {
+                    if (conn.responseCode !in 200..299) return null
+                    val buf = ByteArray(32 * 1024)
+                    var total = 0L
+                    val start = System.nanoTime()
+                    val deadline = start + SPEED_TEST_MS * 1_000_000
+                    conn.inputStream.use { input ->
+                        while (System.nanoTime() < deadline) {
+                            val n = input.read(buf)
+                            if (n < 0) break
+                            total += n
+                        }
+                    }
+                    val secs = (System.nanoTime() - start) / 1e9
+                    if (total < 64 * 1024 || secs <= 0) return null
+                    return total * 8 / secs / 1_000_000
+                } finally {
+                    conn.disconnect()
+                }
+            } catch (_: Throwable) {
+                return null
+            } finally {
+                val c = core
+                if (c != null) thread(name = "xray-speed-dispose") { try { c.stopLoop() } catch (_: Throwable) {} }
+                speedSlots.release()
+            }
+        }
+
         private const val DELAY_HARD_TIMEOUT_MS = 6_000L
         private val delayExecutor = java.util.concurrent.Executors.newCachedThreadPool()
 

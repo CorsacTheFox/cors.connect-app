@@ -477,4 +477,7 @@
     <string name="auto_best_title">Автовыбор (лучший сервер)</string>
     <string name="auto_best_searching">Проверяем серверы…</string>
     <string name="unavailable_servers">Недоступные (%1$d)</string>
+    <string name="speed_testing">скорость…</string>
+    <string name="speed_failed">скорость: ошибка</string>
+    <string name="speed_mbps">%1$.1f Мбит/с</string>
 </resources>

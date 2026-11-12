@@ -470,12 +470,18 @@ class MainActivity :
      *    the connection over the WebRTC data channel.
      */
     private fun measureServiceRtt(host: String): Int? {
-        val viaSocks = try {
-            probeViaSocks5(host = host, port = 443)
-        } catch (_: Exception) {
-            null
+        // Probe the tunnel that is actually up, not the one highlighted in the
+        // list: picking another row (or auto-select) while connected flips
+        // Prefs.connectionMode, and the old lookup then dialed the idle port.
+        for (port in serviceCheckSocksPorts()) {
+            val viaSocks = try {
+                probeViaSocks5(host = host, port = 443, socksPort = port)
+            } catch (e: Exception) {
+                appendLog("Service check $host via :$port failed: ${e.javaClass.simpleName} ${e.message ?: ""}")
+                null
+            }
+            if (viaSocks != null) return viaSocks
         }
-        if (viaSocks != null) return viaSocks
 
         val xray = XrayVpnService.instance
         if (xray?.isRunning == true && !loopbackSocksReachable()) {
@@ -489,10 +495,18 @@ class MainActivity :
     private fun hostDisplayName(host: String): String =
         MainFragment.SERVICE_TARGETS.firstOrNull { it.second == host }?.first ?: host
 
+    /** Loopback SOCKS ports to try, the running tunnel's own port first. */
+    private fun serviceCheckSocksPorts(): List<Int> {
+        val xrayUp = XrayVpnService.instance?.isRunning == true
+        val primary = if (xrayUp) Prefs.xraySocksPort else Prefs.socksPort
+        val other = if (xrayUp) Prefs.socksPort else Prefs.xraySocksPort
+        return listOf(primary.toInt(), other.toInt()).distinct()
+    }
+
     /** Whether the core's loopback SOCKS inbound accepts TCP connections. */
     private fun loopbackSocksReachable(): Boolean = try {
         java.net.Socket().use { socket ->
-            socket.connect(java.net.InetSocketAddress(Net.LOCALHOST, Prefs.activeLoopbackSocksPort.toInt()), 1000)
+            socket.connect(java.net.InetSocketAddress(Net.LOCALHOST, Prefs.xraySocksPort.toInt()), 1000)
             true
         }
     } catch (_: Exception) {
@@ -1125,9 +1139,9 @@ class MainActivity :
      * immediately, before dialing anything, so timing the SOCKS reply alone
      * read ~0 ms and "reachable" even for sites the tunnel can't reach.
      */
-    private fun probeViaSocks5(host: String, port: Int): Int? {
+    private fun probeViaSocks5(host: String, port: Int, socksPort: Int): Int? {
         Socket().use { socket ->
-            socket.connect(InetSocketAddress(Net.LOCALHOST, Prefs.activeLoopbackSocksPort.toInt()), 5000)
+            socket.connect(InetSocketAddress(Net.LOCALHOST, socksPort), 5000)
             socket.soTimeout = 15000
             val output = socket.getOutputStream()
             val input = socket.getInputStream()

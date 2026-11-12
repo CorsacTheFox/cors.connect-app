@@ -36,6 +36,9 @@ class MainFragmentView(private val root: View) {
 
         /** [pingCache] key for the Whitelist Bypass row / connected route ping. */
         private const val WHITELIST_PING_KEY = "__whitelist_bypass__"
+
+        /** One speed-test round per process start (then on each pull-to-refresh). */
+        @Volatile private var launchSpeedRoundDone = false
     }
 
     private val headerSub: TextView = root.findViewById(R.id.headerSub)
@@ -108,6 +111,13 @@ class MainFragmentView(private val root: View) {
 
     /** "Unavailable" section (servers whose ping timed out) — collapsed by default. */
     private var unavailableExpanded = false
+
+    /** Speed results (Mbit/s, -1 = failed), persisted in [Prefs.xraySpeeds]. */
+    private val speedCache = java.util.concurrent.ConcurrentHashMap<String, Double>(Prefs.xraySpeeds)
+    /** True while a speed round is open: each server is tested once after its ping succeeds. */
+    @Volatile private var speedRound = !launchSpeedRoundDone.also { launchSpeedRoundDone = true }
+    private val speedDone = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+    private val speedInFlight = java.util.Collections.synchronizedSet(mutableSetOf<String>())
     private var heroConnected = false
 
     /**
@@ -202,6 +212,7 @@ class MainFragmentView(private val root: View) {
         pingViews.keys.retainAll(liveIds)
         pingTargets.keys.retainAll(liveIds)
         pingServers.keys.retainAll(liveIds)
+        speedCache.keys.retainAll(liveIds)
         renderList()
         updateHeaderSub()
     }
@@ -476,8 +487,9 @@ class MainFragmentView(private val root: View) {
         connectedServerSlot.removeAllViews()
         val activeId = Prefs.xrayActiveServerId
         val (available, unavailable) = currentServers.partition {
-            pingCache[it.id] != -1 || it.id == activeId
+            pingCache[it.id] != -1 && speedCache[it.id] != -1.0
         }
+        if (unavailable.any { it.id == activeId }) unavailableExpanded = true
         val entries: List<ConnectTarget> = whitelistTargets() +
             Prefs.savedDestinations.map { ConnectTarget.Instance(it) } +
             available.map { ConnectTarget.Xray(it) }
@@ -567,9 +579,12 @@ class MainFragmentView(private val root: View) {
     }
 
     /** Lowest measured real delay among the servers, or null if none answered yet. */
-    private fun bestServer(): XrayServer? = currentServers
-        .filter { (pingCache[it.id] ?: -1) >= 0 }
-        .minByOrNull { pingCache[it.id]!! }
+    private fun bestServer(): XrayServer? {
+        val alive = currentServers.filter { (pingCache[it.id] ?: -1) >= 0 && speedCache[it.id] != -1.0 }
+        // Measured speed wins (that's what the user feels); ping breaks ties / fills in.
+        alive.filter { (speedCache[it.id] ?: -1.0) > 0 }.maxByOrNull { speedCache[it.id]!! }?.let { return it }
+        return alive.minByOrNull { pingCache[it.id]!! }
+    }
 
     /**
      * With auto-select on, points [Prefs.xrayActiveServerId] at the best
@@ -735,7 +750,13 @@ class MainFragmentView(private val root: View) {
             if (server.network != bypass.whitelist.xray.XrayNetwork.TCP) add(server.network.wireValue.uppercase())
             if (server.security != bypass.whitelist.xray.XraySecurity.NONE) add(server.security.wireValue.uppercase())
         }
-        protocolView.text = details.joinToString(" · ")
+        val speed = speedCache[server.id]
+        protocolView.text = (details + listOfNotNull(when {
+            server.id in speedInFlight -> context.getString(R.string.speed_testing)
+            speed == null -> null
+            speed < 0 -> context.getString(R.string.speed_failed)
+            else -> context.getString(R.string.speed_mbps, speed)
+        })).joinToString(" · ")
         linkView.visibility = View.GONE
 
         // The ip:port line is gone; every server row shows a live TCP ping on
@@ -806,6 +827,24 @@ class MainFragmentView(private val root: View) {
             } else measurePing(host, port)
             val prev = pingCache[key]
             pingCache[key] = rtt ?: -1
+            val speedServer = pingServers[key]
+            if (speedServer != null && rtt != null && speedRound && speedDone.add(key)) {
+                speedInFlight.add(key)
+                mainHandler.post { renderList() }
+                pingExecutor.execute {
+                    val mbps = XrayEngine.measureServerSpeed(speedServer, root.context.filesDir.resolve("xray"))
+                    speedCache[key] = mbps ?: -1.0
+                    speedInFlight.remove(key)
+                    Prefs.xraySpeeds = HashMap(speedCache)
+                    mainHandler.post {
+                        applyAutoBest()
+                        renderList()
+                        applyRouteTarget()
+                    }
+                }
+            } else if (speedServer != null && rtt == null && speedRound && speedDone.add(key)) {
+                speedCache.remove(key)
+            }
             mainHandler.post {
                 pingInFlight.remove(key)
                 if (key in pingServers) {
@@ -847,6 +886,9 @@ class MainFragmentView(private val root: View) {
      */
     fun invalidatePings() {
         pingCache.clear()
+        speedRound = true
+        speedDone.clear()
+        speedCache.clear()
         renderList()
         refreshRoutePing()
     }
