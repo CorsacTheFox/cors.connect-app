@@ -177,7 +177,9 @@ class MainFragment : Fragment(R.layout.fragment_main_screen), XrayServersListene
         // Subscription bot chip — opens @corsxray2bot in Telegram (or the
         // web profile as fallback) to check / buy a subscription.
         container.onQuickBotClicked = {
-            container.runSpeedTest()
+            if (!container.runSpeedTest()) {
+                Toast.makeText(requireContext(), R.string.speed_test_xray_only, Toast.LENGTH_SHORT).show()
+            }
         }
         // The "5-minute limit" warning links straight to the bot to get a subscription.
         container.onAuthHintBotClicked = {

@@ -50,7 +50,9 @@
     <string name="tile_requires_headless_destination">Сначала выберите headless-подключение</string>
     <string name="tile_vpn_permission_required">Откройте приложение и выдайте разрешение VPN</string>
     <string name="tile_connecting">Подключение…</string>
-    <string name="tile_active">Обход включён</string>
+    <string name="tile_disconnected">Выключено — нажмите для подключения</string>
+    <string name="tile_whitelist_bypass">Whitelist Bypass</string>
+    <string name="tile_active">Подключено</string>
 
     <string name="status_stopping_previous">Остановка предыдущей сессии…</string>
     <string name="status_requesting_replacement">Запрос на замену VPN…</string>
@@ -480,4 +482,5 @@
     <string name="speed_testing">скорость…</string>
     <string name="speed_failed">скорость: ошибка</string>
     <string name="speed_mbps">%1$.1f Мбит/с</string>
+    <string name="speed_test_xray_only">Нет Xray-серверов для проверки</string>
 </resources>

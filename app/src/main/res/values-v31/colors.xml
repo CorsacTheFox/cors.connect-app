@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated: palette follows the system (Material You on Android 12+). -->
+<resources>
+    <color name="accent_emerald">@android:color/system_accent1_600</color>
+    <color name="accent_emerald_soft">@android:color/system_accent2_100</color>
+    <color name="accent_deep">@android:color/system_accent1_700</color>
+    <color name="accent_glow">@android:color/system_accent1_200</color>
+    <color name="on_accent">@android:color/system_accent1_0</color>
+    <color name="ink">@android:color/system_neutral1_900</color>
+    <color name="ink_2">@android:color/system_neutral2_700</color>
+    <color name="ink_3">@android:color/system_neutral2_500</color>
+    <color name="accent_border">@android:color/system_accent1_300</color>
+    <color name="hair">@android:color/system_neutral2_100</color>
+    <color name="hair_strong">@android:color/system_neutral2_200</color>
+    <color name="panel_bg">@android:color/system_neutral2_50</color>
+    <color name="panel_2">@android:color/system_neutral2_100</color>
+    <color name="surface_bg">@android:color/system_neutral1_10</color>
+    <color name="scrim_white_24">#1F000000</color>
+    <color name="scrim_panel">@android:color/system_neutral1_10</color>
+    <color name="scrim_panel_strong">@android:color/system_neutral1_10</color>
+    <color name="backdrop_top">@android:color/system_neutral1_10</color>
+    <color name="backdrop_bottom">@android:color/system_neutral1_10</color>
+    <color name="hair_ink">@android:color/system_neutral2_100</color>
+    <color name="status_dot_idle">@android:color/system_neutral2_300</color>
+    <color name="accent_wash">@android:color/system_accent2_50</color>
+    <color name="nav_item_active_bg">@android:color/system_accent2_100</color>
+    <color name="hero_core_top">@android:color/system_neutral2_50</color>
+    <color name="hero_core_bottom">@android:color/system_neutral2_50</color>
+    <color name="hero_inner_glow">@android:color/system_accent2_100</color>
+    <color name="row_bg">@android:color/system_neutral2_100</color>
+    <color name="row_ink_34">@android:color/system_neutral2_400</color>
+</resources>

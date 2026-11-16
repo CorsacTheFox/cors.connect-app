@@ -6,10 +6,11 @@
 
     <!-- One continuous animated backdrop behind everything, including the
          bottom navigation, so the translucent nav has no seam. -->
-    <bypass.whitelist.ui.GradientBackdropView
+    <View
         android:id="@+id/gradientBackdrop"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent"
+        android:background="?android:attr/colorBackground" />
 
     <LinearLayout
         android:layout_width="match_parent"

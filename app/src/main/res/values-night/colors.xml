@@ -1,44 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Generated: palette follows the system (Material You on Android 12+). -->
 <resources>
-    <!-- Cors.Connect — Nocturne: neon-violet on near-black.
-         Дизайн только тёмный, поэтому values и values-night совпадают. -->
-    <color name="accent_emerald">#FFB485F5</color>
-    <color name="accent_emerald_soft">#29B485F5</color>
-    <color name="accent_deep">#FF8E60F0</color>
-    <color name="accent_glow">#59B485F5</color>
+    <color name="accent_emerald">#FFD0BCFF</color>
+    <color name="accent_emerald_soft">#FF4A4458</color>
+    <color name="accent_deep">#FFB69DF8</color>
+    <color name="accent_glow">#FF4F378B</color>
+    <color name="on_accent">#FF381E72</color>
+    <color name="ink">#FFE6E0E9</color>
+    <color name="ink_2">#FFCAC4D0</color>
+    <color name="ink_3">#FF938F99</color>
+    <color name="accent_border">#FF6750A4</color>
+    <color name="hair">#FF2B2930</color>
+    <color name="hair_strong">#FF49454F</color>
+    <color name="panel_bg">#FF211F26</color>
+    <color name="panel_2">#FF2B2930</color>
+    <color name="surface_bg">#FF141218</color>
+    <color name="scrim_white_24">#1FFFFFFF</color>
+    <color name="scrim_panel">#FF141218</color>
+    <color name="scrim_panel_strong">#FF141218</color>
+    <color name="backdrop_top">#FF141218</color>
+    <color name="backdrop_bottom">#FF141218</color>
+    <color name="hair_ink">#FF2B2930</color>
+    <color name="status_dot_idle">#FF605D66</color>
+    <color name="accent_wash">#FF332D41</color>
+    <color name="nav_item_active_bg">#FF4A4458</color>
+    <color name="hero_core_top">#FF211F26</color>
+    <color name="hero_core_bottom">#FF211F26</color>
+    <color name="hero_inner_glow">#FF332D41</color>
+    <color name="row_bg">#FF2B2930</color>
+    <color name="row_ink_34">#FF79747E</color>
     <color name="warn_amber">#FFE0A94A</color>
     <color name="error_red">#FFE5484D</color>
-    <color name="ok_green">#FF3DDC84</color>
-
-    <color name="ink">#FFE9E9ED</color>
-    <color name="ink_2">#FFB2B6CA</color>
-    <color name="ink_3">#FF75798C</color>
-    <color name="accent_border">#73B485F5</color>
-    <color name="hair">#1AB485F5</color>
-    <color name="hair_strong">#29B485F5</color>
-
-    <color name="panel_bg">#FF15161F</color>
-    <color name="panel_2">#FF171922</color>
-    <color name="surface_bg">#FF0B0C14</color>
-    <color name="scrim_white_24">#1FFFFFFF</color>
-    <color name="scrim_panel">#F2171922</color>
-    <color name="scrim_panel_strong">#F70B0C14</color>
-
-    <!-- Animated backdrop -->
-    <color name="backdrop_top">#FF0B0C14</color>
-    <color name="backdrop_bottom">#FF08090F</color>
-    <color name="blob_1">#6B9E64F0</color>
-    <color name="blob_2">#576E50DC</color>
-    <color name="dot_grid">#26B485F5</color>
-
-    <!-- Redesign helpers (точные alpha из прототипа) -->
-    <color name="hair_ink">#12E9E9ED</color>
-    <color name="status_dot_idle">#40E9E9ED</color>
-    <color name="accent_wash">#1FB485F5</color>
-    <color name="nav_item_active_bg">#1AB485F5</color>
-    <color name="hero_core_top">#FF1A1226</color>
-    <color name="hero_core_bottom">#FF101017</color>
-    <color name="hero_inner_glow">#38B485F5</color>
-    <color name="row_bg">#FF1E2130</color>
-    <color name="row_ink_34">#57E9E9ED</color>
+    <color name="ok_green">#FF3DAA6A</color>
+    <color name="blob_1">#00000000</color>
+    <color name="blob_2">#00000000</color>
+    <color name="dot_grid">#00000000</color>
 </resources>

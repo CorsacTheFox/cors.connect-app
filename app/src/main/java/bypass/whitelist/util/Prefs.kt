@@ -514,6 +514,11 @@ object Prefs {
             return generated
         }
 
+    /** Id of the Xray server of the last started connection (quick-settings tile reconnects to it). */
+    var xrayLastConnectedId: String
+        get() = prefs.getString("xray_last_connected_id", "") ?: ""
+        set(value) = prefs.edit { putString("xray_last_connected_id", value) }
+
     var themeMode: ThemeMode
         get() {
             val name = prefs.getString(PrefsKeys.THEME_MODE, ThemeMode.SYSTEM.name) ?: ThemeMode.SYSTEM.name

@@ -50,7 +50,9 @@
     <string name="tile_requires_headless_destination">Select a headless destination first</string>
     <string name="tile_vpn_permission_required">Open the app once and grant VPN permission</string>
     <string name="tile_connecting">Connecting…</string>
-    <string name="tile_active">Bypass ON</string>
+    <string name="tile_disconnected">Off — tap to connect</string>
+    <string name="tile_whitelist_bypass">Whitelist Bypass</string>
+    <string name="tile_active">Connected</string>
 
     <string name="status_stopping_previous">Stopping previous session…</string>
     <string name="status_requesting_replacement">Requesting VPN replacement…</string>
@@ -475,4 +477,5 @@
     <string name="speed_testing">speed…</string>
     <string name="speed_failed">speed: fail</string>
     <string name="speed_mbps">%1$.1f Mbps</string>
+    <string name="speed_test_xray_only">No Xray servers to test</string>
 </resources>

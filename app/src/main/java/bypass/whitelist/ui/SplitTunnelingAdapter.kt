@@ -67,7 +67,7 @@ class SplitTunnelingAdapter(
         requestIconIfNeeded(item.packageName, iconView)
         labelView.text = item.label
         val isDark = (view.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-        labelView.setTextColor(if (isDark) Color.WHITE else Color.BLACK)
+        labelView.setTextColor(view.context.getColor(R.color.ink))
         packageView.text = item.packageName
 
         val toggle = { checked: Boolean ->

@@ -875,6 +875,7 @@ class MainActivity :
     }
 
     private fun startXrayVpnService() {
+        Prefs.xrayLastConnectedId = Prefs.xrayActiveServerId
         startService(Intent(this, XrayVpnService::class.java))
         appendLog("Xray VPN start requested")
     }
@@ -996,8 +997,12 @@ class MainActivity :
         intent.action = null
         val isConnecting = lastStatus == VpnStatus.CONNECTING
         if (!connected && !isConnecting && !TunnelServiceState.isAnyTunnelComponentRunning(this)) {
-            Prefs.activeDestination?.let { onConnectPressed(it) } ?: run {
-                Toast.makeText(this, R.string.error_no_destination, Toast.LENGTH_SHORT).show()
+            val xray = Prefs.activeXrayServer
+            when {
+                Prefs.connectionMode == ConnectionMode.XRAY && xray != null ->
+                    onConnectPressed(ConnectTarget.Xray(xray))
+                Prefs.activeDestination != null -> onConnectPressed(Prefs.activeDestination!!)
+                else -> onConnectPressed(ConnectTarget.WhitelistBypass(Prefs.corsServiceId))
             }
         } else if (connected) {
             onDisconnectPressed()
@@ -1544,15 +1549,6 @@ class MainActivity :
                 .remove(fragment)
                 .commitAllowingStateLoss()
         }
-    }
-
-    /** Feeds touch-down points to the animated backdrop's ripple effect. */
-    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
-            findViewById<bypass.whitelist.ui.GradientBackdropView>(R.id.gradientBackdrop)
-                ?.rippleAt(ev.x, ev.y)
-        }
-        return super.dispatchTouchEvent(ev)
     }
 
     companion object {

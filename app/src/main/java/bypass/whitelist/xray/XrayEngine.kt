@@ -182,10 +182,13 @@ class XrayEngine(
 
         @Volatile private var envReady = false
 
-        private const val SPEED_TEST_URL = "https://speed.cloudflare.com/__down?bytes=3000000"
-        private const val SPEED_TEST_MS = 5_000L
+        /** Exactly [SPEED_TEST_BYTES] are requested, so the server never sends more than the cap. */
+        private const val SPEED_TEST_BYTES = 1_000_000
+        private const val SPEED_TEST_URL = "https://speed.cloudflare.com/__down?bytes=$SPEED_TEST_BYTES"
+        /** Hard time cap of the download phase — slow links stop early and use less. */
+        private const val SPEED_TEST_MS = 3_000L
         /** Parallel downloads would split the device's bandwidth and skew results. */
-        private val speedSlots = java.util.concurrent.Semaphore(2)
+        private val speedSlots = java.util.concurrent.Semaphore(1)
 
         private val quietHandler = object : CoreCallbackHandler {
             override fun startup(): Long = 0L
@@ -238,20 +241,24 @@ class XrayEngine(
                 conn.useCaches = false
                 try {
                     if (conn.responseCode !in 200..299) return null
-                    val buf = ByteArray(32 * 1024)
+                    val buf = ByteArray(16 * 1024)
                     var total = 0L
-                    val start = System.nanoTime()
-                    val deadline = start + SPEED_TEST_MS * 1_000_000
+                    var start = 0L
+                    var counted = 0L
+                    val deadline = System.nanoTime() + SPEED_TEST_MS * 1_000_000
                     conn.inputStream.use { input ->
-                        while (System.nanoTime() < deadline) {
+                        while (System.nanoTime() < deadline && total < SPEED_TEST_BYTES) {
                             val n = input.read(buf)
                             if (n < 0) break
                             total += n
+                            // Clock starts at the first payload byte: TLS/proxy
+                            // handshake time is latency, not throughput.
+                            if (start == 0L) start = System.nanoTime() else counted += n
                         }
                     }
                     val secs = (System.nanoTime() - start) / 1e9
-                    if (total < 64 * 1024 || secs <= 0) return null
-                    return total * 8 / secs / 1_000_000
+                    if (start == 0L || counted < 32 * 1024 || secs <= 0) return null
+                    return counted * 8 / secs / 1_000_000
                 } finally {
                     conn.disconnect()
                 }

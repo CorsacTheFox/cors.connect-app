@@ -116,8 +116,13 @@ class App : Application() {
          * call sites compile; it is ignored.
          */
         fun applyTheme(mode: ThemeMode = ThemeMode.DARK) {
-            @Suppress("UNUSED_EXPRESSION") mode
-            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
+            AppCompatDelegate.setDefaultNightMode(
+                when (mode) {
+                    ThemeMode.LIGHT -> AppCompatDelegate.MODE_NIGHT_NO
+                    ThemeMode.DARK -> AppCompatDelegate.MODE_NIGHT_YES
+                    ThemeMode.SYSTEM -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+                }
+            )
         }
 
         /** Reads back the last persisted crash (see [installCrashLogger]), if any. */
