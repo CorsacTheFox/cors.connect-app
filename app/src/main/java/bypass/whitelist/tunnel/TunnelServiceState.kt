@@ -13,9 +13,14 @@ object TunnelServiceState {
 
     @Volatile
     var vpnStatusCallback: ParamCallback<VpnStatus>? = null
+        // DEBUG control port: record the status even when no activity listens.
+        get() { val cb = field; return { s -> bypass.whitelist.debug.DebugControlServer.serviceStatus = s; cb?.invoke(s) } }
 
     @Volatile
     var logCallback: ParamCallback<String>? = null
+        // DEBUG control port: keep service log lines while the activity is paused
+        // (when it is resumed, MainActivity.appendLog records them instead).
+        get() = field ?: { m -> bypass.whitelist.debug.DebugControlServer.log(m) }
 
     fun isTunnelActive(context: Context): Boolean {
         // A stop that outlived its hard cap (hung native engine shutdown) is

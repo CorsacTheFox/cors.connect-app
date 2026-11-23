@@ -21,6 +21,8 @@ data class CallConfig(
         CallPlatform.TELEMOST -> "TM"
         CallPlatform.WBSTREAM -> "WB"
         CallPlatform.DION -> "DN"
+        CallPlatform.BITRIX -> "BX"
+        CallPlatform.BLINK -> "BL"
     }
 
     val platformLabel: String get() = when (platform) {
@@ -28,6 +30,8 @@ data class CallConfig(
         CallPlatform.TELEMOST -> "Telemost"
         CallPlatform.WBSTREAM -> "WB Stream"
         CallPlatform.DION -> "DION"
+        CallPlatform.BITRIX -> "Bitrix24"
+        CallPlatform.BLINK -> "Blink"
     }
 
     fun toJson(): JSONObject = JSONObject().apply {
@@ -81,6 +85,8 @@ data class CallConfig(
                 CallPlatform.TELEMOST -> "Telemost"
                 CallPlatform.WBSTREAM -> "WB Stream"
                 CallPlatform.DION -> "DION"
+                CallPlatform.BITRIX -> "Bitrix24"
+                CallPlatform.BLINK -> "Blink"
             }
             return label
         }

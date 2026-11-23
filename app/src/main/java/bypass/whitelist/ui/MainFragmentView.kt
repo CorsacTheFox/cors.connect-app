@@ -28,6 +28,8 @@ import kotlin.concurrent.thread
 
 class MainFragmentView(private val root: View) {
 
+    enum class ConnectLogState { HIDDEN, RUNNING, FAILED, CONNECTED }
+
     companion object {
         private const val PING_TIMEOUT_MS = 2_000
 
@@ -36,6 +38,8 @@ class MainFragmentView(private val root: View) {
 
         /** [pingCache] key for the Whitelist Bypass row / connected route ping. */
         private const val WHITELIST_PING_KEY = "__whitelist_bypass__"
+
+        const val CONNECT_LOG_MAX_LINES = 200
 
     }
 
@@ -106,6 +110,48 @@ class MainFragmentView(private val root: View) {
     var onAuthHintBotClicked: Callback? = null
     var onAllServersClicked: Callback? = null
     var onAutoBestClicked: Callback? = null
+    var onConnectRetryClicked: Callback? = null
+    /** (title, body) — the host shows it in a bottom sheet. */
+    var onHelpRequested: ((String, String) -> Unit)? = null
+
+    private val connectLogPanel: View = root.findViewById(R.id.connectLogPanel)
+    private val connectLogToggle: TextView = root.findViewById(R.id.connectLogToggle)
+    private val connectLogRetry: TextView = root.findViewById(R.id.connectLogRetry)
+    private val connectLogScroll: android.widget.ScrollView = root.findViewById(R.id.connectLogScroll)
+    private val connectLogText: TextView = root.findViewById(R.id.connectLogText)
+    private var connectLogState = ConnectLogState.HIDDEN
+    private var connectLogExpanded = true
+
+    fun bindConnectLog(state: ConnectLogState, lines: Collection<String>, failure: String?) {
+        val ctx = root.context
+        connectLogState = state
+        connectLogExpanded = state != ConnectLogState.CONNECTED
+        connectLogPanel.visibility = if (state == ConnectLogState.HIDDEN) View.GONE else View.VISIBLE
+        connectLogRetry.visibility = if (state == ConnectLogState.FAILED) View.VISIBLE else View.GONE
+        if (state == ConnectLogState.FAILED && failure != null) {
+            // statusDetail is hidden in the idle hero state — show the error here.
+            statusDetail.text = failure
+            statusDetail.visibility = View.VISIBLE
+            statusDetail.setTextColor(ctx.getColor(R.color.error_red))
+        } else {
+            statusDetail.setTextColor(ctx.getColor(R.color.ink_3))
+        }
+        connectLogText.text = lines.joinToString("\n")
+        applyConnectLogExpanded()
+    }
+
+    fun appendConnectLog(lines: Collection<String>) {
+        if (connectLogState == ConnectLogState.HIDDEN) return
+        connectLogText.text = lines.joinToString("\n")
+        if (connectLogExpanded) connectLogScroll.post { connectLogScroll.fullScroll(View.FOCUS_DOWN) }
+    }
+
+    private fun applyConnectLogExpanded() {
+        val ctx = root.context
+        connectLogScroll.visibility = if (connectLogExpanded) View.VISIBLE else View.GONE
+        connectLogToggle.text = ctx.getString(R.string.connect_log_title) + if (connectLogExpanded) "  ▾" else "  ▸"
+        if (connectLogExpanded) connectLogScroll.post { connectLogScroll.fullScroll(View.FOCUS_DOWN) }
+    }
 
     /** "Unavailable" section (servers whose ping timed out) — collapsed by default. */
     private var unavailableExpanded = false
@@ -177,6 +223,11 @@ class MainFragmentView(private val root: View) {
         quickChipBot.setOnClickListener { onQuickBotClicked?.invoke() }
         authHintBotLink.setOnClickListener { onAuthHintBotClicked?.invoke() }
         routeAllServers.setOnClickListener { onAllServersClicked?.invoke() }
+        connectLogRetry.setOnClickListener { onConnectRetryClicked?.invoke() }
+        connectLogToggle.setOnClickListener {
+            connectLogExpanded = !connectLogExpanded
+            applyConnectLogExpanded()
+        }
     }
 
     /**
@@ -498,9 +549,16 @@ class MainFragmentView(private val root: View) {
         callsList.visibility = View.VISIBLE
         val inflater = LayoutInflater.from(root.context)
         callsList.visibility = if (showConnectedCard) View.GONE else View.VISIBLE
+        val sectioned = !showConnectedCard && !collapsedToActive
+        if (sectioned && visibleEntries.firstOrNull()?.let { it !is ConnectTarget.Xray } == true) {
+            callsList.addView(buildSectionHeader(R.string.section_whitelists, first = true) { showWhitelistHelp() })
+        }
         visibleEntries.forEachIndexed { index, target ->
             val inCard = showConnectedCard
-            if (!inCard && !collapsedToActive && index == autoBefore) callsList.addView(buildAutoBestRow(inflater))
+            if (sectioned && index == autoBefore) {
+                callsList.addView(buildSectionHeader(R.string.section_regular, first = index == 0) { showRegularHelp() })
+                callsList.addView(buildAutoBestRow(inflater))
+            }
             val row = inflater.inflate(R.layout.item_call_row, if (inCard) connectedServerSlot else callsList, false)
             row.clipToOutline = true
             when (target) {
@@ -524,7 +582,10 @@ class MainFragmentView(private val root: View) {
             callsList.addView(row)
         }
         if (!showConnectedCard && !collapsedToActive) {
-            if (autoBefore < 0 && unavailable.isNotEmpty()) callsList.addView(buildAutoBestRow(inflater))
+            if (autoBefore < 0 && unavailable.isNotEmpty()) {
+                callsList.addView(buildSectionHeader(R.string.section_regular, first = visibleEntries.isEmpty()) { showRegularHelp() })
+                callsList.addView(buildAutoBestRow(inflater))
+            }
             if (unavailable.isNotEmpty()) {
                 callsList.addView(buildUnavailableDivider(unavailable.size))
                 if (unavailableExpanded) unavailable.forEach { server ->
@@ -542,15 +603,20 @@ class MainFragmentView(private val root: View) {
         if ((mainListScroll.layoutParams as LinearLayout.LayoutParams).weight == 0f) mainListScroll.post { fitListToContent() }
         // Whitelist Bypass has no node-load line — match the server rows' height.
         val wlCount = if (showConnectedCard) 0 else visibleEntries.count { it is ConnectTarget.WhitelistBypass }
-        if (wlCount > 0 && callsList.childCount > wlCount) {
-            val ref = callsList.getChildAt(wlCount)
+        val wlOffset = if (sectioned && wlCount > 0) 1 else 0
+        // Reference = first real server row (skip section header + auto row).
+        val refIndex = (0 until callsList.childCount).firstOrNull { i ->
+            i >= wlOffset + wlCount && callsList.getChildAt(i).id == R.id.callRow && callsList.getChildAt(i).findViewById<View>(R.id.rowLoadRow) != null
+        }
+        if (wlCount > 0 && refIndex != null) {
+            val ref = callsList.getChildAt(refIndex)
             val w = callsList.width.takeIf { it > 0 } ?: (root.width - 2 * (16 * root.resources.displayMetrics.density).toInt())
             if (w > 0) {
                 ref.measure(
                     View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
                     View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
                 )
-                for (i in 0 until wlCount) callsList.getChildAt(i).minimumHeight = ref.measuredHeight
+                for (i in wlOffset until wlOffset + wlCount) callsList.getChildAt(i).minimumHeight = ref.measuredHeight
             }
         }
     }
@@ -652,6 +718,71 @@ class MainFragmentView(private val root: View) {
         return row
     }
 
+    /** Section title ("Белые списки" / "Обычные подключения") with a "?" help button. */
+    private fun buildSectionHeader(titleRes: Int, first: Boolean, onHelp: () -> Unit): View {
+        val ctx = root.context
+        val d = ctx.resources.displayMetrics.density
+        return LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding((4 * d).toInt(), ((if (first) 2 else 14) * d).toInt(), 0, (6 * d).toInt())
+            addView(TextView(ctx).apply {
+                text = ctx.getString(titleRes)
+                setTextColor(ctx.getColor(R.color.ink_3))
+                textSize = 10f
+                letterSpacing = 0.1f
+                isAllCaps = true
+                typeface = androidx.core.content.res.ResourcesCompat.getFont(ctx, R.font.jetbrains_mono)
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(TextView(ctx).apply {
+                text = "?"
+                gravity = android.view.Gravity.CENTER
+                setTextColor(ctx.getColor(R.color.ink_3))
+                textSize = 11f
+                setBackgroundResource(R.drawable.bg_destination_card)
+                contentDescription = ctx.getString(R.string.section_help)
+                setOnClickListener { onHelp() }
+            }, LinearLayout.LayoutParams((22 * d).toInt(), (22 * d).toInt()).apply { marginEnd = (4 * d).toInt() })
+        }
+    }
+
+    private fun showWhitelistHelp() {
+        val ctx = root.context
+        val names = Prefs.corsServices.map { it.name }.ifEmpty { listOf("") }
+        val body = buildString {
+            append(ctx.getString(R.string.help_whitelists_intro))
+            names.mapNotNull { serviceHelp(it) }.distinct().forEach { append("\n\n").append(it) }
+        }
+        onHelpRequested?.invoke(ctx.getString(R.string.section_whitelists), body)
+    }
+
+    private fun showRegularHelp() {
+        val ctx = root.context
+        onHelpRequested?.invoke(ctx.getString(R.string.section_regular), ctx.getString(R.string.help_regular))
+    }
+
+    /** Short per-service hint (shown in the section help and on long-press of a service row). */
+    fun serviceHelp(serviceName: String): String? {
+        val ctx = root.context
+        val n = serviceName.lowercase()
+        val res = when {
+            "blink" in n -> R.string.help_service_blink
+            "vk" in n || "вк" in n -> R.string.help_service_vk
+            "telemost" in n || "телемост" in n || "yandex" in n -> R.string.help_service_telemost
+            "bitrix" in n || "битрикс" in n -> R.string.help_service_bitrix
+            "wb" in n || "dion" in n -> R.string.help_service_generic_call
+            else -> return null
+        }
+        val label = serviceName.ifBlank { ctx.getString(R.string.connection_type_whitelist_bypass) }
+        return label + " — " + ctx.getString(res)
+    }
+
+    fun showServiceHelp(serviceName: String) {
+        val ctx = root.context
+        val body = serviceHelp(serviceName) ?: ctx.getString(R.string.help_whitelists_intro)
+        onHelpRequested?.invoke(whitelistTitle(serviceName), body)
+    }
+
     private fun buildUnavailableDivider(count: Int): View {
         val ctx = root.context
         val d = ctx.resources.displayMetrics.density
@@ -726,10 +857,12 @@ class MainFragmentView(private val root: View) {
         val protocolView = row.findViewById<TextView>(R.id.rowProtocol)
         val statusDot = row.findViewById<View>(R.id.rowStatusDot)
 
-        nameView.text = whitelistTitle(target.serviceName)
-        linkView.text = root.context.getString(R.string.whitelist_bypass_row_sub)
-        // The protocol line would just duplicate the row name here.
-        protocolView.visibility = View.GONE
+        // Same card layout as the server rows: icon · name · detail line · ping.
+        nameView.text = target.serviceName.ifBlank { context.getString(R.string.connection_type_whitelist_bypass) }
+        row.findViewById<TextView>(R.id.rowFlag).apply { text = "📡"; visibility = View.VISIBLE }
+        protocolView.text = context.getString(R.string.whitelist_bypass_row_type)
+        protocolView.visibility = View.VISIBLE
+        linkView.visibility = View.GONE
         // No Xray address of its own — tcping the Cors.Connect backend instead.
         val pingView = row.findViewById<TextView>(R.id.rowPing)
         pingView.visibility = View.VISIBLE
@@ -747,6 +880,7 @@ class MainFragmentView(private val root: View) {
         val statusDot = row.findViewById<View>(R.id.rowStatusDot)
 
         nameView.text = config.name
+        row.findViewById<TextView>(R.id.rowFlag).apply { text = "🔗"; visibility = View.VISIBLE }
         protocolView.text = config.platformLabel
         linkView.visibility = View.GONE
         // No host:port to tcping — this is a call link, not an Xray server.

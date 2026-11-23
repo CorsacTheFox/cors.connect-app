@@ -58,6 +58,8 @@ class CorsInstanceController(
         fun onCorsClaimed(username: String)
         /** Called on the main thread when the flow has failed terminally. */
         fun onCorsFailed(message: String)
+        /** Called on the main thread with a diagnostic line for the live connect log. */
+        fun onCorsLog(line: String) {}
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -110,6 +112,7 @@ class CorsInstanceController(
                 // claim_token and must claim manually later.
                 val created = createInstanceResilient()
                 currentInstanceId = created.instanceId
+                log("instance #${created.instanceId} created" + if (created.outputLink != null) " (link ready)" else ", waiting for output link")
                 currentClaimToken = created.claimToken
                 Prefs.corsInstanceId = created.instanceId
                 Prefs.corsClaimToken = created.claimToken.orEmpty()
@@ -130,7 +133,7 @@ class CorsInstanceController(
                 // otherwise poll until it appears.
                 val ready = created.outputLink ?: pollForOutput(created.instanceId)
                 if (stopped) { stopTracked(); return@bg }
-                if (ready == null) { failRes("cors_status_failed"); return@bg }
+                if (ready == null) { stopTracked(); return@bg }
 
                 val config = CallConfig.newWith(
                     name = resString("cors_instance_name"),
@@ -361,17 +364,53 @@ class CorsInstanceController(
 
     private fun pollForOutput(instanceId: Int): String? {
         var attempts = 0
+        var lastStatus: String? = null
+        var hardErrors = 0
         while (!stopped && attempts < MAX_POLL_ATTEMPTS) {
             attempts++
             try {
                 val state: InstanceState = client.getInstance(instanceId)
-                if (state.isTerminal) {
-                    if (state.status != "stopped") failDetail("cors_status_failed", state.error ?: state.status)
+                hardErrors = 0
+                if (state.status != lastStatus) {
+                    lastStatus = state.status
+                    log("instance #$instanceId: ${state.status}")
+                    post { if (!stopped) host.onCorsStatus(resString("cors_status_instance") + ": " + state.status) }
+                }
+                if (state.isTerminal || (state.status !in LIVE_OR_UNKNOWN && !state.error.isNullOrBlank())) {
+                    // Server-side failure (e.g. 'crashed' seconds after start):
+                    // the 'error' field carries the creator log tail — surface
+                    // its last lines in the live log and fail right away.
+                    val errLines = state.error.orEmpty().lines().map { it.trimEnd() }.filter { it.isNotBlank() }
+                    errLines.takeLast(ERROR_TAIL_LINES).forEach { log("  | $it") }
+                    if (state.status != "stopped" || errLines.isNotEmpty()) {
+                        failDetail("cors_status_failed", state.status + (errLines.lastOrNull()?.let { " — $it" } ?: ""))
+                    } else {
+                        failDetail("cors_status_failed", state.status)
+                    }
                     return null
                 }
                 state.outputLink?.let { return it }
-            } catch (_: CorsException) { /* transient — keep polling */ }
+            } catch (e: CorsException) {
+                log("poll #$attempts: HTTP ${e.code} ${e.detail}")
+                // 4xx (except 429) won't fix itself: the instance is gone or
+                // we aren't allowed to see it. Previously these were swallowed
+                // and the poll ran silently for ~2 minutes.
+                if (e.code in 400..499 && e.code != 429 && ++hardErrors >= 3) {
+                    failDetail("cors_status_failed", "HTTP ${e.code}: ${e.detail}")
+                    return null
+                }
+            } catch (e: Exception) {
+                log("poll #$attempts: ${e.javaClass.simpleName}: ${e.message}")
+                if (++hardErrors >= 3) {
+                    failDetail("cors_status_failed", e.message ?: e.javaClass.simpleName)
+                    return null
+                }
+            }
             sleep(POLL_INTERVAL_MS)
+        }
+        if (!stopped) {
+            log("no output link after $attempts polls")
+            failRes("cors_status_timeout")
         }
         return null
     }
@@ -616,6 +655,11 @@ class CorsInstanceController(
         return if (text.isEmpty()) clean else "$clean: $text"
     }
 
+    private fun log(line: String) {
+        Log.i(TAG, line)
+        post { if (!stopped) host.onCorsLog(line) }
+    }
+
     private fun status(key: String) = post { host.onCorsStatus(resString(key)) }
     private fun failRes(key: String) = post { host.onCorsFailed(resString(key)) }
     private fun failDetail(key: String, detail: Any?) = post { host.onCorsFailed(detailMessage(key, detail)) }
@@ -625,6 +669,8 @@ class CorsInstanceController(
         private const val TAG = "CorsInstanceController"
         private const val POLL_INTERVAL_MS = 1_500L
         private const val MAX_POLL_ATTEMPTS = 80  // ~2 min at 1.5s
+        private const val ERROR_TAIL_LINES = 15
+        private val LIVE_OR_UNKNOWN = setOf("pending", "running", "starting", "stopping", "")
 
         // VK relay adoption: keep retrying the tunnel-routed lookup while the
         // call connects; the relay instance's temp TTL is 5 min.

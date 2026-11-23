@@ -141,6 +141,10 @@ class SettingsScreenFragment : Fragment(R.layout.fragment_settings_screen) {
             UpdateActionSheet.show(parentFragmentManager)
         }
 
+        ui.addRow(card, R.drawable.ic_setting_debug, getString(R.string.diag_title), getString(R.string.diag_row_sub), null) {
+            (activity as? MainActivityHost)?.pushSubPage(DiagnosticsFragment())
+        }
+
         val batterySub = if (BatteryOptimizer.isIgnored(requireContext())) {
             getString(R.string.settings_row_battery_ok)
         } else {

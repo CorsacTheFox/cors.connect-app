@@ -82,6 +82,8 @@ class HeadlessSessionService : Service() {
             Prefs.headless ||
             platform == CallPlatform.WBSTREAM ||
             platform == CallPlatform.DION ||
+            platform == CallPlatform.BITRIX ||
+            platform == CallPlatform.BLINK ||
             platform == CallPlatform.TELEMOST
         if (!headlessMode) {
             showToast(R.string.tile_requires_headless_destination)
@@ -95,6 +97,7 @@ class HeadlessSessionService : Service() {
         sessionRunning = true
         controller = HeadlessJoinController(
             applicationInfo.nativeLibraryDir,
+            filesDir,
             object : JoinFragmentHost {
                 override fun appendLog(message: String) {
                     logWriter.append(message)
@@ -112,6 +115,13 @@ class HeadlessSessionService : Service() {
 
                 override fun onJoinStatusText(text: String) {
                     updateNotification(text)
+                }
+
+                override fun onLoginLink(link: String) {
+                    logWriter.append(getString(R.string.tile_blink_login_required))
+                    updateNotification(getString(R.string.tile_blink_login_required))
+                    showToast(R.string.tile_blink_login_required)
+                    stopSession(stopDependentServices = true)
                 }
 
                 override fun requestVpn() {

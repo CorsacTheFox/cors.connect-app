@@ -17,6 +17,7 @@ class App : Application() {
         super.onCreate()
         instance = this
         Prefs.init(this)
+        if (BuildConfig.DEBUG) bypass.whitelist.debug.DebugControlServer.start()
         bypass.whitelist.xray.XrayRouting.assetsDir = filesDir.resolve("xray")
         applyTheme(Prefs.themeMode)
         installCrashLogger()

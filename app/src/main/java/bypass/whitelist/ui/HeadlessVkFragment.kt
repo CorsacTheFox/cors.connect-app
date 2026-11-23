@@ -80,6 +80,7 @@ class HeadlessVkFragment : Fragment(), JoinSessionShutdown {
                             webView.stopLoading()
                             webView.loadUrl(BLANK_URL)
                             webView.isVisible = false
+                            host?.setJoinUiVisible(false)
                         }
                     }
                     host?.onJoinStatus(status)

@@ -67,6 +67,7 @@ class MainFragment : Fragment(R.layout.fragment_main_screen), XrayServersListene
         fun onServiceCheckPressed(callback: (List<ServiceStatus>) -> Unit)
         fun isTunnelActive(): Boolean
         fun currentStatus(): VpnStatus?
+        fun onConnectRetry()
     }
 
     companion object {
@@ -217,11 +218,24 @@ class MainFragment : Fragment(R.layout.fragment_main_screen), XrayServersListene
             when (target) {
                 is ConnectTarget.Xray -> showServerRowMenu(target.server)
                 is ConnectTarget.Instance -> showDestinationRowMenu(target.config)
-                is ConnectTarget.WhitelistBypass -> Unit // no per-row menu
+                is ConnectTarget.WhitelistBypass -> content?.showServiceHelp(target.serviceName)
             }
         }
 
         updateSubscriptionStats()
+
+        container.onConnectRetryClicked = { host()?.onConnectRetry() }
+        container.onHelpRequested = { title, body ->
+            ConfirmActionSheet.show(
+                manager = parentFragmentManager,
+                title = title,
+                subtitle = body,
+                confirmLabel = getString(R.string.help_ok),
+                cancelLabel = getString(R.string.help_close),
+                onConfirm = { },
+            )
+        }
+        container.bindConnectLog(connectLogState, connectLogLines, connectLogFailure)
 
         pendingStatus?.let { container.bindStatus(it) }
         pendingStatus = null
@@ -268,6 +282,47 @@ class MainFragment : Fragment(R.layout.fragment_main_screen), XrayServersListene
 
     fun onStatusTextChanged(text: String) {
         content?.bindStatusText(text)
+    }
+
+    // ---- live connect log -------------------------------------------------
+    // State lives here (not in the view) so it survives view re-creation.
+    private val connectLogLines = ArrayDeque<String>()
+    private var connectLogState = MainFragmentView.ConnectLogState.HIDDEN
+    private var connectLogFailure: String? = null
+
+    fun connectLogBegin() {
+        connectLogLines.clear()
+        connectLogFailure = null
+        connectLogState = MainFragmentView.ConnectLogState.RUNNING
+        content?.bindConnectLog(connectLogState, connectLogLines, null)
+    }
+
+    fun connectLogAppend(line: String) {
+        if (connectLogState == MainFragmentView.ConnectLogState.HIDDEN) return
+        line.lines().filter { it.isNotBlank() }.forEach {
+            connectLogLines.addLast(it)
+            while (connectLogLines.size > MainFragmentView.CONNECT_LOG_MAX_LINES) connectLogLines.removeFirst()
+        }
+        content?.appendConnectLog(connectLogLines)
+    }
+
+    fun connectLogFailed(message: String) {
+        if (connectLogState == MainFragmentView.ConnectLogState.HIDDEN) connectLogLines.clear()
+        connectLogFailure = message
+        connectLogState = MainFragmentView.ConnectLogState.FAILED
+        content?.bindConnectLog(connectLogState, connectLogLines, message)
+    }
+
+    fun connectLogConnected() {
+        if (connectLogState == MainFragmentView.ConnectLogState.HIDDEN) return
+        connectLogState = MainFragmentView.ConnectLogState.CONNECTED
+        content?.bindConnectLog(connectLogState, connectLogLines, null)
+    }
+
+    fun connectLogHide() {
+        connectLogState = MainFragmentView.ConnectLogState.HIDDEN
+        connectLogFailure = null
+        content?.bindConnectLog(connectLogState, connectLogLines, null)
     }
 
     fun onConnectedChanged(connected: Boolean) {

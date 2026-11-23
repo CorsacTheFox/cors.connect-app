@@ -9,4 +9,5 @@ interface JoinFragmentHost {
     fun requestVpn()
     fun setJoinUiVisible(visible: Boolean)
     fun onJoinCancel()
+    fun onLoginLink(link: String) {}
 }

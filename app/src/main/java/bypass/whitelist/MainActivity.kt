@@ -149,6 +149,7 @@ class MainActivity :
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContentView(R.layout.activity_main)
+        bypass.whitelist.debug.DebugControlServer.attach(this)
 
         requestNotificationPermissionIfNeeded()
         reportLastCrashIfAny()
@@ -309,6 +310,7 @@ class MainActivity :
                 lastStatus = status
                 mainFragment()?.onStatusChanged(status)
                 if (status == VpnStatus.TUNNEL_ACTIVE) {
+                    endConnectLogConnected()
                     if (!connected) {
                         connected = true
                         mainFragment()?.onConnectedChanged(true)
@@ -367,6 +369,7 @@ class MainActivity :
         ProxyService.onDisconnect = null
         XrayVpnService.onDisconnect = null
         logWriter.close()
+        bypass.whitelist.debug.DebugControlServer.detach(this)
         // Stop the Cors instance when the Activity is truly going away (back
         // press / process death), so the backend DELETEs it instead of leaving
         // an orphan that a later reconnect would duplicate. Skipped during a
@@ -390,6 +393,8 @@ class MainActivity :
     }
 
     override fun onConnectPressed(target: ConnectTarget) {
+        connectLogActive = false
+        mainFragment()?.connectLogHide()
         when (target) {
             is ConnectTarget.WhitelistBypass -> startCorsConnect()
             is ConnectTarget.Instance -> onConnectPressed(target.config)
@@ -415,6 +420,8 @@ class MainActivity :
 
     override fun onDisconnectPressed() {
         pendingConnectTarget = null
+        connectLogActive = false
+        mainFragment()?.connectLogHide()
         if (resetInProgress) {
             forceUnlockReset("Stopped waiting for previous session")
             return
@@ -519,6 +526,12 @@ class MainActivity :
             return
         }
         corsController?.stop()
+        beginConnectLog()
+        // React immediately: the hero goes into its "connecting" state and the
+        // status line follows every step (the controller works in background).
+        lastStatus = VpnStatus.CONNECTING
+        mainFragment()?.onConnectedChanged(false)
+        mainFragment()?.onStatusTextChanged(getString(R.string.cors_status_creating))
         corsController = CorsInstanceController(applicationContext, corsClient, corsHost).also { it.start() }
         appendLog("Cors.Connect: requesting instance")
     }
@@ -550,7 +563,14 @@ class MainActivity :
 
     private val corsHost = object : CorsInstanceController.Host {
         override fun onCorsStatus(text: String) {
+            if (corsController == null) return
+            appendLog("Cors.Connect: $text")
             mainFragment()?.onStatusTextChanged(text)
+        }
+
+        override fun onCorsLog(line: String) {
+            if (corsController == null) return
+            appendLog("Cors.Connect: $line")
         }
 
         override fun onCorsOutputReady(config: CallConfig) {
@@ -586,9 +606,21 @@ class MainActivity :
         }
 
         override fun onCorsFailed(message: String) {
+            // Ignore late failures from a controller the user already cancelled.
+            if (corsController == null) return
+            bypass.whitelist.debug.DebugControlServer.lastError = "Cors.Connect: $message"
             appendLog("Cors.Connect: $message")
             runOnUiThread {
-                Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
+                corsController?.stop()
+                corsController = null
+                corsPendingOutput = null
+                // Previously only a Toast: lastStatus never left its idle value,
+                // so the hero/status line showed nothing while the flow died.
+                lastStatus = VpnStatus.CALL_FAILED
+                mainFragment()?.onConnectedChanged(false)
+                mainFragment()?.onStatusChanged(VpnStatus.CALL_FAILED)
+                mainFragment()?.onStatusTextChanged(message)
+                endConnectLogFailed(message)
             }
         }
     }
@@ -699,8 +731,33 @@ class MainActivity :
         startActivity(Intent.createChooser(share, getString(R.string.share_logs)))
     }
 
+    /** True while a connect attempt is in progress: log lines also feed the Main screen's live panel. */
+    @Volatile private var connectLogActive = false
+
+    private fun beginConnectLog() {
+        connectLogActive = true
+        mainFragment()?.connectLogBegin()
+    }
+
+    private fun endConnectLogFailed(message: String) {
+        connectLogActive = false
+        mainFragment()?.connectLogFailed(message)
+    }
+
+    private fun endConnectLogConnected() {
+        if (!connectLogActive) return
+        connectLogActive = false
+        mainFragment()?.connectLogConnected()
+    }
+
+    override fun onConnectRetry() {
+        onConnectPressed(ConnectTarget.WhitelistBypass(Prefs.corsServiceId))
+    }
+
     override fun appendLog(message: String) {
         logWriter.append(message)
+        bypass.whitelist.debug.DebugControlServer.log(message)
+        if (connectLogActive) runOnUiThread { mainFragment()?.connectLogAppend(message) }
         if (overlayVisible) {
             runOnUiThread {
                 overlayLogsText.text = logWriter.displayText()
@@ -714,20 +771,50 @@ class MainActivity :
         runOnUiThread { mainFragment()?.onStatusTextChanged(text) }
     }
 
+    private var blinkLoginLink: String? = null
+
+    override fun onLoginLink(link: String) {
+        runOnUiThread {
+            blinkLoginLink = link
+            showBlinkLoginSheet()
+        }
+    }
+
+    private fun showBlinkLoginSheet() {
+        val link = blinkLoginLink ?: return
+        val shown = supportFragmentManager.findFragmentByTag(bypass.whitelist.ui.BlinkLoginSheet.TAG) as? bypass.whitelist.ui.BlinkLoginSheet
+        if (shown != null) {
+            shown.updateLink(link)
+            return
+        }
+        if (isDestroyed || supportFragmentManager.isStateSaved) return
+        bypass.whitelist.ui.BlinkLoginSheet.show(supportFragmentManager, link) { onJoinCancel() }
+    }
+
+    private fun dismissBlinkLoginSheet() {
+        blinkLoginLink = null
+        val shown = supportFragmentManager.findFragmentByTag(bypass.whitelist.ui.BlinkLoginSheet.TAG) as? bypass.whitelist.ui.BlinkLoginSheet
+        shown?.dismissAllowingStateLoss()
+    }
+
     override fun onJoinStatus(status: VpnStatus) {
+        if (status != VpnStatus.ACTION_REQUIRED_LOGIN) runOnUiThread { dismissBlinkLoginSheet() }
         if (resetInProgress && status != VpnStatus.CALL_FAILED) return
         TunnelVpnService.instance?.updateStatus(status)
         ProxyService.instance?.updateStatus(status)
         lastStatus = status
+        if (status == VpnStatus.CALL_FAILED) bypass.whitelist.debug.DebugControlServer.lastError = "CALL_FAILED"
         runOnUiThread {
             if (status == VpnStatus.CALL_FAILED) {
                 fullReset()
                 lastStatus = VpnStatus.CALL_FAILED
                 mainFragment()?.onStatusChanged(VpnStatus.CALL_FAILED)
+                if (connectLogActive) endConnectLogFailed(getString(VpnStatus.CALL_FAILED.labelRes))
                 return@runOnUiThread
             }
             mainFragment()?.onStatusChanged(status)
             if (status == VpnStatus.TUNNEL_ACTIVE) {
+                endConnectLogConnected()
                 connected = true
                 mainFragment()?.onConnectedChanged(true)
                 maybeAdoptManualCallLink()
@@ -809,6 +896,7 @@ class MainActivity :
     }
 
     override fun onJoinCancel() {
+        runOnUiThread { dismissBlinkLoginSheet() }
         pendingConnectTarget = null
         runOnUiThread { fullReset() }
     }
@@ -934,6 +1022,20 @@ class MainActivity :
     }
 
     private fun handleIntent(intent: Intent?) {
+        if (BuildConfig.DEBUG) when (intent?.getStringExtra(bypass.whitelist.debug.DebugControlServer.EXTRA_CMD)) {
+            "connect" -> {
+                intent.removeExtra(bypass.whitelist.debug.DebugControlServer.EXTRA_CMD)
+                val xray = Prefs.activeXrayServer
+                if (Prefs.connectionMode == ConnectionMode.XRAY && xray != null) onConnectPressed(ConnectTarget.Xray(xray))
+                else onConnectPressed(ConnectTarget.WhitelistBypass(Prefs.corsServiceId))
+                return
+            }
+            "disconnect" -> {
+                intent.removeExtra(bypass.whitelist.debug.DebugControlServer.EXTRA_CMD)
+                onDisconnectPressed()
+                return
+            }
+        }
         val data = intent?.data
         // Bot cabinet OAuth redirect: https://miniapp.cors-fox.cc/auth/oauth/callback?code=…&state=…
         if (intent != null && intent.action == Intent.ACTION_VIEW && data != null &&
@@ -1245,6 +1347,7 @@ class MainActivity :
         }
         val url = config.url.trim()
         if (url.isEmpty()) return
+        if (!connectLogActive) beginConnectLog()
         // Remember links joined without the Cors.Connect controller (manual
         // destinations) so the instance can be adopted once connected.
         manualJoinLink = if (corsController == null) url else null
@@ -1277,12 +1380,14 @@ class MainActivity :
         mainFragment()?.onConnectedChanged(false)
 
         val headlessMode =
-            Prefs.headless || platform == CallPlatform.WBSTREAM || platform == CallPlatform.DION
+            Prefs.headless || platform == CallPlatform.WBSTREAM || platform == CallPlatform.DION ||
+                platform == CallPlatform.BITRIX || platform == CallPlatform.BLINK
 
         if (headlessMode && platform != CallPlatform.VK) {
             setJoinOverlayVisible(false)
             activeHeadlessController = HeadlessJoinController(
                 applicationInfo.nativeLibraryDir,
+                filesDir,
                 this,
                 platform,
                 url,
