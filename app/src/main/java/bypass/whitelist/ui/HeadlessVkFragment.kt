@@ -70,6 +70,18 @@ class HeadlessVkFragment : Fragment(), JoinSessionShutdown {
                         host?.requestVpn()
                     }
                 } else {
+                    if (status != VpnStatus.ACTION_REQUIRED_CAPTCHA) {
+                        // Captcha answered (or never needed): drop the captcha
+                        // page right away instead of waiting for TUNNEL_ACTIVE,
+                        // otherwise a solved captcha stays on screen while the
+                        // call is still connecting (or if it fails).
+                        activity?.runOnUiThread {
+                            if (!isSessionAlive() || !webView.isVisible) return@runOnUiThread
+                            webView.stopLoading()
+                            webView.loadUrl(BLANK_URL)
+                            webView.isVisible = false
+                        }
+                    }
                     host?.onJoinStatus(status)
                 }
             },
